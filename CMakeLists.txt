@@ -47,8 +47,12 @@ set(LINK_LIBS
 )
 
 FILE(GLOB_RECURSE SRC_LIST    "src/*.cpp")
-FILE(GLOB_RECURSE HEADER_LIST "include/map_server/*.h" "include/map_server/impl/*.hpp" "include/*.h")
+FILE(GLOB_RECURSE HEADER_LIST "include/map_server/*.h" "include/map_server/impl/*.hpp" "include/common.h")
 
 link_directories(${PCL_LIBRARY_DIRS} ${OCTOMAP_LIBRARY_DIRS})
 add_executable(map_server_node src/map_server_node.cpp ${HEADER_LIST})
 target_link_libraries(map_server_node ${LINK_LIBS})
+
+link_directories(${PCL_LIBRARY_DIRS} ${OCTOMAP_LIBRARY_DIRS})
+add_executable(dynamic_node src/dynamic_node.cpp ${HEADER_LIST})
+target_link_libraries(dynamic_node ${LINK_LIBS})

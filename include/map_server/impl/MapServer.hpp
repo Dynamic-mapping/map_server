@@ -233,7 +233,6 @@ bool MapServer::openFile(const std::string& filename){
 void MapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud){
   ros::WallTime startTime = ros::WallTime::now();
 
-
   //
   // ground filtering in base frame
   //
@@ -891,13 +890,6 @@ void MapServer::filterGroundPlane(const PCLPointCloud& pc, PCLPointCloud& ground
       second_pass.setFilterLimitsNegative (true);
       second_pass.filter(nonground);
     }
-
-    // debug:
-    //        pcl::PCDWriter writer;
-    //        if (pc_ground.size() > 0)
-    //          writer.write<PCLPoint>("ground.pcd",pc_ground, false);
-    //        if (pc_nonground.size() > 0)
-    //          writer.write<PCLPoint>("nonground.pcd",pc_nonground, false);
 
   }
 

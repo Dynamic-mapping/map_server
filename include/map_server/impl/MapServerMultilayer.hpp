@@ -108,9 +108,6 @@ void MapServerMultilayer::handlePreNodeTraversal(const ros::Time& rostime){
   m_multiGridmap.at(2).z = (maxArmHeight+minArmHeight)/2.0;
 
 
-
-
-
   // TODO: also clear multilevel maps in BBX region (see MapServer.cpp)?
 
   bool mapInfoChanged = mapChanged(gridmapInfo, m_gridmap.info);
