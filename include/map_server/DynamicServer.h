@@ -27,7 +27,7 @@ private:
     void subscribe();
     void advertise();
 
-    void updateMap(const Transformation &sCur, const Transformation &sPre);
+    void updateMap(const point3d &sensorOrigin);
 
     int64_t timestamp_tolerance_ns_;
 

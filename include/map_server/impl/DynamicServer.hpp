@@ -29,12 +29,9 @@ void DynamicServer::advertise()
                 "centerMap", 1);
 }
 
-void DynamicServer::updateMap(const Transformation& sCur,
-                              const Transformation& sPre)
+void DynamicServer::updateMap(const point3d &sensorOrigin)
 {
     /// Transform Checking
-    Eigen::Isometry3f sDelta = sCur * sPre.inverse();
-    point3d sensorOrigin(sCur.matrix()(0,3), sCur.matrix()(1,3), sCur.matrix()(2,3));
     if (!m_octree->coordToKeyChecked(sensorOrigin, m_updateBBXMin)
       || !m_octree->coordToKeyChecked(sensorOrigin, m_updateBBXMax))
     {
@@ -44,18 +41,17 @@ void DynamicServer::updateMap(const Transformation& sCur,
     /// Check the Old Octree
     OcTreeT oldTree = *m_octree;
     m_octree->clear();
-    for (OcTree::leaf_iterator it = oldTree.begin();
-         it != oldTree.end(); it++) {
-        Eigen::Vector4f t_point (it->getX(), it->getY(), it->get(z), 1);
-        Eigen::Vector4f t_trans = sDelta.matrix() * t_point;
+    for (OcTree::leaf_iterator it = oldTree.begin(); it != oldTree.end(); it++) {
 
-        point3d old_point(t_trans(0), t_trans(0), t_trans(0));
+        if(oldTree.isNodeOccupied(*it)){
 
+          if (sqrt(pow(it.getX() - sensorOrigin.x(),2) + pow(it.getY() - sensorOrigin.y(),2)) >= 80)
+              continue;
+          point3d old_point(it.getX(), it.getY(), it.getZ());
+
+          m_octree->updateNode(old_point, true);
+        }
     }
-
-    if (m_compressMap)
-      m_octree->prune();
-
 }
 
 void DynamicServer::laserCallback(const sensor_msgs::PointCloud2Ptr &cloud)
@@ -71,7 +67,7 @@ void DynamicServer::laserCallback(const sensor_msgs::PointCloud2Ptr &cloud)
     try {
       m_tfListener.lookupTransform(m_worldFrameId, cloud->header.frame_id, cloud->header.stamp, sensorToWorldTf);
     } catch(tf::TransformException& ex){
-      ROS_ERROR_STREAM( "Transform error of sensor data: " << ex.what() << ", quitting callback");
+//      ROS_ERROR_STREAM( "Transform error of sensor data: " << ex.what() << ", quitting callback");
       return;
     }
     Eigen::Matrix4f sensorToWorld;
@@ -81,11 +77,9 @@ void DynamicServer::laserCallback(const sensor_msgs::PointCloud2Ptr &cloud)
     static Eigen::Matrix4f previousLong = Eigen::MatrixXf::Zero(4, 4);
     double distance = sqrt(pow(sensorToWorld(0,3) - previousLong(0,3),2) +
                            pow(sensorToWorld(1,3) - previousLong(1,3),2));
-    if (distance > 20) {
-        Transformation sCur, sPre;
-        sCur.matrix() = sensorToWorld;
-        sPre.matrix() = previousLong;
-        updateMap(sCur, sPre);
+    if (distance > 1) {
+        point3d sensor_org (sensorToWorld(0,3), sensorToWorld(1,3), sensorToWorld(2,3));
+        updateMap(sensor_org);
         previousLong = sensorToWorld;
     }
 
