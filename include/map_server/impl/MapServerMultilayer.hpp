@@ -1,42 +1,12 @@
-/*
- * Copyright (c) 2011-2013, A. Hornung, M. Philips
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the University of Freiburg nor the names of its
- *       contributors may be used to endorse or promote products derived from
- *       this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
-
-#include <octomap_server/OctomapServerMultilayer.h>
+#pragma once
+#include "map_server/MapServerMultilayer.h"
 
 using namespace octomap;
 
-namespace octomap_server{
+namespace map_server{
 
-
-
-OctomapServerMultilayer::OctomapServerMultilayer(ros::NodeHandle private_nh_)
-: OctomapServer(private_nh_)
+MapServerMultilayer::MapServerMultilayer(ros::NodeHandle private_nh_)
+: MapServer(private_nh_)
 {
 
   // TODO: callback for arm_navigation attached objects was removed, is
@@ -94,19 +64,19 @@ OctomapServerMultilayer::OctomapServerMultilayer(ros::NodeHandle private_nh_)
 
 }
 
-OctomapServerMultilayer::~OctomapServerMultilayer(){
+MapServerMultilayer::~MapServerMultilayer(){
   for (unsigned i = 0; i < m_multiMapPub.size(); ++i){
     delete m_multiMapPub[i];
   }
 
 }
 
-void OctomapServerMultilayer::handlePreNodeTraversal(const ros::Time& rostime){
+void MapServerMultilayer::handlePreNodeTraversal(const ros::Time& rostime){
   // multilayer server always publishes 2D maps:
   m_publish2DMap = true;
   nav_msgs::MapMetaData gridmapInfo = m_gridmap.info;
 
-  OctomapServer::handlePreNodeTraversal(rostime);
+  MapServer::handlePreNodeTraversal(rostime);
 
 
   // recalculate height of arm layer (stub, TODO)
@@ -141,7 +111,7 @@ void OctomapServerMultilayer::handlePreNodeTraversal(const ros::Time& rostime){
 
 
 
-  // TODO: also clear multilevel maps in BBX region (see OctomapServer.cpp)?
+  // TODO: also clear multilevel maps in BBX region (see MapServer.cpp)?
 
   bool mapInfoChanged = mapChanged(gridmapInfo, m_gridmap.info);
 
@@ -160,7 +130,7 @@ void OctomapServerMultilayer::handlePreNodeTraversal(const ros::Time& rostime){
   }
 }
 
-void OctomapServerMultilayer::handlePostNodeTraversal(const ros::Time& rostime){
+void MapServerMultilayer::handlePostNodeTraversal(const ros::Time& rostime){
 
   // TODO: calc tall / short obs. cells for arm layer, => temp arm layer
 //  std::vector<int> shortObsCells;
@@ -198,14 +168,14 @@ void OctomapServerMultilayer::handlePostNodeTraversal(const ros::Time& rostime){
 
 
 
-  OctomapServer::handlePostNodeTraversal(rostime);
+  MapServer::handlePostNodeTraversal(rostime);
 
   for (unsigned i = 0; i < m_multiMapPub.size(); ++i){
     m_multiMapPub[i]->publish(m_multiGridmap.at(i).map);
   }
 
 }
-void OctomapServerMultilayer::update2DMap(const OcTreeT::iterator& it, bool occupied){
+void MapServerMultilayer::update2DMap(const OcTreeT::iterator& it, bool occupied){
   double z = it.getZ();
   double s2 = it.getSize()/2.0;
 

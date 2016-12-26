@@ -1,41 +1,13 @@
-/*
- * Copyright (c) 2012, D. Kuhner, P. Ruchti, University of Freiburg
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the University of Freiburg nor the names of its
- *       contributors may be used to endorse or promote products derived from
- *       this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
-
-#include <octomap_server/TrackingOctomapServer.h>
+#pragma once
+#include "map_server/TrackingMapServer.h"
 #include <string>
 
 using namespace octomap;
 
-namespace octomap_server {
+namespace map_server {
 
-TrackingOctomapServer::TrackingOctomapServer(const std::string& filename) :
-	    OctomapServer()
+TrackingMapServer::TrackingMapServer(const std::string& filename) :
+        MapServer()
 {
   //read tree if necessary
   if (filename != "") {
@@ -64,7 +36,7 @@ TrackingOctomapServer::TrackingOctomapServer(const std::string& filename) :
   private_nh.param("min_change_pub", min_change_pub, 0);
 
   if (track_changes && listen_changes) {
-    ROS_WARN("OctoMapServer: It might not be useful to publish changes and at the same time listen to them."
+    ROS_WARN("MapServer: It might not be useful to publish changes and at the same time listen to them."
         "Setting 'track_changes' to false!");
     track_changes = false;
   }
@@ -79,22 +51,22 @@ TrackingOctomapServer::TrackingOctomapServer(const std::string& filename) :
   if (listen_changes) {
     ROS_INFO("starting client");
     subChangeSet = private_nh.subscribe(changeSetTopic, 1,
-                                        &TrackingOctomapServer::trackCallback, this);
+                                        &TrackingMapServer::trackCallback, this);
   }
 }
 
-TrackingOctomapServer::~TrackingOctomapServer() {
+TrackingMapServer::~TrackingMapServer() {
 }
 
-void TrackingOctomapServer::insertScan(const tf::Point & sensorOrigin, const PCLPointCloud & ground, const PCLPointCloud & nonground) {
-  OctomapServer::insertScan(sensorOrigin, ground, nonground);
+void TrackingMapServer::insertScan(const tf::Point & sensorOrigin, const PCLPointCloud & ground, const PCLPointCloud & nonground) {
+  MapServer::insertScan(sensorOrigin, ground, nonground);
 
   if (track_changes) {
     trackChanges();
   }
 }
 
-void TrackingOctomapServer::trackChanges() {
+void TrackingMapServer::trackChanges() {
   KeyBoolMap::const_iterator startPnt = m_octree->changedKeysBegin();
   KeyBoolMap::const_iterator endPnt = m_octree->changedKeysEnd();
 
@@ -138,7 +110,7 @@ void TrackingOctomapServer::trackChanges() {
   }
 }
 
-void TrackingOctomapServer::trackCallback(sensor_msgs::PointCloud2Ptr cloud) {
+void TrackingMapServer::trackCallback(sensor_msgs::PointCloud2Ptr cloud) {
   pcl::PointCloud<pcl::PointXYZI> cells;
   pcl::fromROSMsg(*cloud, cells);
   ROS_DEBUG("[client] size of newly occupied cloud: %i", (int)cells.points.size());

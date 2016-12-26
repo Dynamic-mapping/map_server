@@ -1,35 +1,4 @@
-/*
- * Copyright (c) 2010-2013, A. Hornung, University of Freiburg
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the University of Freiburg nor the names of its
- *       contributors may be used to endorse or promote products derived from
- *       this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
-
-#ifndef OCTOMAP_SERVER_OCTOMAPSERVER_H
-#define OCTOMAP_SERVER_OCTOMAPSERVER_H
-
+#pragma once
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <nav_msgs/OccupancyGrid.h>
@@ -40,7 +9,7 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <std_srvs/Empty.h>
 #include <dynamic_reconfigure/server.h>
-#include <octomap_server/OctomapServerConfig.h>
+#include <map_server/MapServerConfig.h>
 
 #include <pcl/point_types.h>
 #include <pcl/conversions.h>
@@ -66,14 +35,12 @@
 #include <octomap/octomap.h>
 #include <octomap/OcTreeKey.h>
 
-//#define COLOR_OCTOMAP_SERVER // turned off here, turned on identical ColorOctomapServer.h - easier maintenance, only maintain OctomapServer and then copy and paste to ColorOctomapServer and change define. There are prettier ways to do this, but this works for now
-
 #ifdef COLOR_OCTOMAP_SERVER
 #include <octomap/ColorOcTree.h>
 #endif
 
-namespace octomap_server {
-class OctomapServer {
+namespace map_server {
+class MapServer {
 
 public:
 #ifdef COLOR_OCTOMAP_SERVER
@@ -88,8 +55,8 @@ public:
   typedef octomap_msgs::GetOctomap OctomapSrv;
   typedef octomap_msgs::BoundingBoxQuery BBXSrv;
 
-  OctomapServer(ros::NodeHandle private_nh_ = ros::NodeHandle("~"));
-  virtual ~OctomapServer();
+  MapServer(ros::NodeHandle private_nh_ = ros::NodeHandle("~"));
+  virtual ~MapServer();
   virtual bool octomapBinarySrv(OctomapSrv::Request  &req, OctomapSrv::GetOctomap::Response &res);
   virtual bool octomapFullSrv(OctomapSrv::Request  &req, OctomapSrv::GetOctomap::Response &res);
   bool clearBBXSrv(BBXSrv::Request& req, BBXSrv::Response& resp);
@@ -120,7 +87,7 @@ protected:
             && key[1] <= m_updateBBXMax[1]);
   }
 
-  void reconfigureCallback(octomap_server::OctomapServerConfig& config, uint32_t level);
+  void reconfigureCallback(map_server::MapServerConfig& config, uint32_t level);
   void publishBinaryOctoMap(const ros::Time& rostime = ros::Time::now()) const;
   void publishFullOctoMap(const ros::Time& rostime = ros::Time::now()) const;
   virtual void publishAll(const ros::Time& rostime = ros::Time::now());
@@ -205,7 +172,7 @@ protected:
   ros::ServiceServer m_octomapBinaryService, m_octomapFullService, m_clearBBXService, m_resetService;
   tf::TransformListener m_tfListener;
   boost::recursive_mutex m_config_mutex;
-  dynamic_reconfigure::Server<OctomapServerConfig> m_reconfigureServer;
+  dynamic_reconfigure::Server<MapServerConfig> m_reconfigureServer;
 
   OcTreeT* m_octree;
   octomap::KeyRay m_keyRay;  // temp storage for ray casting
@@ -259,5 +226,4 @@ protected:
   bool m_useColoredMap;
 };
 }
-
-#endif
+#include "impl/MapServer.hpp"
