@@ -20,7 +20,7 @@ void DynamicServer::readParameters()
 void DynamicServer::subscribe()
 {
     subCloud = nh_.subscribe(
-                "/laserCloud", 1, &DynamicServer::laserCallback, this);
+                "/dynamicMapping", 1, &DynamicServer::loamCallback, this);
 }
 
 void DynamicServer::advertise()
@@ -54,20 +54,19 @@ void DynamicServer::updateMap(const point3d &sensorOrigin)
     }
 }
 
-void DynamicServer::laserCallback(const sensor_msgs::PointCloud2Ptr &cloud)
+void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
 {
 
     /// Step1 Obtain the Pointcloud
     ros::WallTime startTime = ros::WallTime::now();
     PCLPointCloud pc; // input cloud for filtering and ground-detection
-    pcl::fromROSMsg(*cloud, pc);
+    pcl::fromROSMsg(loam->cloud, pc);
 
     /// Step2 Extract the transformation from tf
     tf::StampedTransform sensorToWorldTf;
     try {
-      m_tfListener.lookupTransform(m_worldFrameId, cloud->header.frame_id, cloud->header.stamp, sensorToWorldTf);
+      m_tfListener.lookupTransform(m_worldFrameId, loam->header.frame_id, loam->header.stamp, sensorToWorldTf);
     } catch(tf::TransformException& ex){
-//      ROS_ERROR_STREAM( "Transform error of sensor data: " << ex.what() << ", quitting callback");
       return;
     }
     Eigen::Matrix4f sensorToWorld;
@@ -77,7 +76,7 @@ void DynamicServer::laserCallback(const sensor_msgs::PointCloud2Ptr &cloud)
     static Eigen::Matrix4f previousLong = Eigen::MatrixXf::Zero(4, 4);
     double distance = sqrt(pow(sensorToWorld(0,3) - previousLong(0,3),2) +
                            pow(sensorToWorld(1,3) - previousLong(1,3),2));
-    if (distance > 1) {
+    if (distance > 4) {
         point3d sensor_org (sensorToWorld(0,3), sensorToWorld(1,3), sensorToWorld(2,3));
         updateMap(sensor_org);
         previousLong = sensorToWorld;
@@ -93,10 +92,8 @@ void DynamicServer::laserCallback(const sensor_msgs::PointCloud2Ptr &cloud)
     pcl::PassThrough<PCLPoint> pass_z;
     pass_z.setFilterFieldName("z");
     pass_z.setFilterLimits(m_pointcloudMinZ, m_pointcloudMaxZ);
-
     PCLPointCloud pc_ground; // segmented ground plane
     PCLPointCloud pc_nonground; // everything else
-
     if (m_filterGroundPlane){
       pass_x.setInputCloud(pc.makeShared());
       pass_x.filter(pc);
@@ -132,5 +129,18 @@ void DynamicServer::laserCallback(const sensor_msgs::PointCloud2Ptr &cloud)
     double total_elapsed = (ros::WallTime::now() - startTime).toSec();
     ROS_DEBUG("Pointcloud insertion in MapServer done (%zu+%zu pts (ground/nonground), %f sec)", pc_ground.size(), pc_nonground.size(), total_elapsed);
 
-    publishAll(cloud->header.stamp);
+    /// Step6 Insert the Time Labeled LaserScan
+    insertTimeScan(sensorToWorld, loam);
+    publishAll(loam->header.stamp);
+}
+
+void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::LoamScanPtr& loam)
+{
+    for(size_t i = 0 ; i < loam->Scans.size(); i++) {
+
+        std::cout << "For time id " << i << std::endl;
+        doom::LaserScan scan = loam->Scans[i];
+        for (size_t j = 0; j < scan.Points.size(); j++)
+            std::cout << scan.Points[j] << std::endl;
+    }
 }
