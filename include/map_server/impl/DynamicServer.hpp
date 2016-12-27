@@ -127,7 +127,9 @@ void DynamicServer::laserCallback(const sensor_msgs::PointCloud2Ptr &cloud)
       pc_nonground.header = pc.header;
     }
 
-    /// Step5 Insert the pointcloud
+    /// Step5 for the new Laser Scan, make the ICP alignment
+
+    /// Step6 Insert the pointcloud
     insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
     double total_elapsed = (ros::WallTime::now() - startTime).toSec();
     ROS_DEBUG("Pointcloud insertion in MapServer done (%zu+%zu pts (ground/nonground), %f sec)", pc_ground.size(), pc_nonground.size(), total_elapsed);
