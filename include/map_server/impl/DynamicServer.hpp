@@ -124,46 +124,36 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
       pc_nonground.header = pc.header;
     }
 
-<<<<<<< HEAD
-    /// Step5 for the new Laser Scan, make the ICP alignment
-
-    /// Step6 Insert the pointcloud
+    /// Step5 Insert Pointcloud
     insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
-=======
-    /// Step5 Insert the pointcloud
-//    insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
->>>>>>> 50c4525eda70214ac379baf6e3de1b0d005404ca
     double total_elapsed = (ros::WallTime::now() - startTime).toSec();
     ROS_DEBUG("Pointcloud insertion in MapServer done (%zu+%zu pts (ground/nonground), %f sec)", pc_ground.size(), pc_nonground.size(), total_elapsed);
 
     /// Step6 Insert the Time Labeled LaserScan
-    insertTimeScan(sensorToWorld, loam);
+//    insertTimeScan(sensorToWorld, loam);
     publishAll(loam->header.stamp);
 }
 
 void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::LoamScanPtr& loam)
 {
-
     //! Step1 Extract out each occupied cells
     point3d pOri(trans(0,3), trans(1,3), trans(2,3));
     for(size_t i = 0 ; i < loam->Scans.size(); i++) {
 
         doom::LaserScan scan = loam->Scans[i];
-        if (scan.Points[0].x <= 0.001) continue;
+        if (fabs(scan.Points[0].x) <= 0.001) continue;
 
         point3d pPrev;
         KeySet occupied_cells;
         for (size_t j = 0; j < scan.Points.size(); j++) {
 
-            if (scan.Points[j].x <= 0.001) continue;
-
+            if (fabs(scan.Points[j].x) <= 0.001)
+                continue;
             // Transform the scan point into world frame
             Eigen::Vector4f scan_point(scan.Points[j].x, scan.Points[j].y, scan.Points[j].z, 1);
             Eigen::Vector4f result = trans * scan_point;
             point3d pEnd(result(0), result(1), result(2));
 
-            m_octree->updateNode(pEnd, true);
-            continue;
             if ((pEnd - pOri).norm() > 40) {
               pEnd = pOri + (pEnd - pOri).normalized() * 40;
             }
