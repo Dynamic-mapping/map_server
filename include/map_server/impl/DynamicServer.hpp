@@ -45,7 +45,7 @@ void DynamicServer::updateMap(const point3d &sensorOrigin)
 
         if(oldTree.isNodeOccupied(*it)){
 
-          if (sqrt(pow(it.getX() - sensorOrigin.x(),2) + pow(it.getY() - sensorOrigin.y(),2)) >= 80)
+          if (sqrt(pow(it.getX() - sensorOrigin.x(),2) + pow(it.getY() - sensorOrigin.y(),2)) >= 40)
               continue;
           point3d old_point(it.getX(), it.getY(), it.getZ());
 
