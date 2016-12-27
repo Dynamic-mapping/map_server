@@ -32,6 +32,19 @@
 #include <cv_bridge/cv_bridge.h>
 #include <image_geometry/stereo_camera_model.h>
 
+// ROS MESSAGE
+#include <std_msgs/ColorRGBA.h>
+#include <std_srvs/Empty.h>
+#include <sensor_msgs/Imu.h>
+#include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/CameraInfo.h>
+#include <geometry_msgs/TransformStamped.h>
+#include <visualization_msgs/MarkerArray.h>
+#include <doom/LaserScan.h>
+#include <doom/LoamScan.h>
+//#include <volumetric_msgs/SetBoxOccupancy.h>
+//#include <volumetric_msgs/SetDisplayBounds.h>
+
 // TF LIB
 #include <tf/transform_datatypes.h>
 #include <tf/transform_broadcaster.h>
@@ -43,17 +56,6 @@
 #include <octomap_msgs/conversions.h>
 #include <octomap_msgs/Octomap.h>
 #include <octomap_msgs/GetOctomap.h>
-
-// ROS MESSAGE
-#include <std_msgs/ColorRGBA.h>
-#include <std_srvs/Empty.h>
-#include <sensor_msgs/Imu.h>
-#include <sensor_msgs/PointCloud2.h>
-#include <sensor_msgs/CameraInfo.h>
-#include <geometry_msgs/TransformStamped.h>
-#include <visualization_msgs/MarkerArray.h>
-//#include <volumetric_msgs/SetBoxOccupancy.h>
-//#include <volumetric_msgs/SetDisplayBounds.h>
 
 // OPENCV LIB
 #include <opencv2/opencv.hpp>

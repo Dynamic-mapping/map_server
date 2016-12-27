@@ -20,7 +20,7 @@ void DynamicServer::readParameters()
 void DynamicServer::subscribe()
 {
     subCloud = nh_.subscribe(
-                "/laserCloud", 1, &DynamicServer::laserCallback, this);
+                "/dynamicMapping", 1, &DynamicServer::loamCallback, this);
 }
 
 void DynamicServer::advertise()
@@ -45,7 +45,7 @@ void DynamicServer::updateMap(const point3d &sensorOrigin)
 
         if(oldTree.isNodeOccupied(*it)){
 
-          if (sqrt(pow(it.getX() - sensorOrigin.x(),2) + pow(it.getY() - sensorOrigin.y(),2)) >= 80)
+          if (sqrt(pow(it.getX() - sensorOrigin.x(),2) + pow(it.getY() - sensorOrigin.y(),2)) >= 40)
               continue;
           point3d old_point(it.getX(), it.getY(), it.getZ());
 
@@ -54,20 +54,19 @@ void DynamicServer::updateMap(const point3d &sensorOrigin)
     }
 }
 
-void DynamicServer::laserCallback(const sensor_msgs::PointCloud2Ptr &cloud)
+void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
 {
 
     /// Step1 Obtain the Pointcloud
     ros::WallTime startTime = ros::WallTime::now();
     PCLPointCloud pc; // input cloud for filtering and ground-detection
-    pcl::fromROSMsg(*cloud, pc);
+    pcl::fromROSMsg(loam->cloud, pc);
 
     /// Step2 Extract the transformation from tf
     tf::StampedTransform sensorToWorldTf;
     try {
-      m_tfListener.lookupTransform(m_worldFrameId, cloud->header.frame_id, cloud->header.stamp, sensorToWorldTf);
+      m_tfListener.lookupTransform(m_worldFrameId, loam->header.frame_id, loam->header.stamp, sensorToWorldTf);
     } catch(tf::TransformException& ex){
-//      ROS_ERROR_STREAM( "Transform error of sensor data: " << ex.what() << ", quitting callback");
       return;
     }
     Eigen::Matrix4f sensorToWorld;
@@ -77,7 +76,7 @@ void DynamicServer::laserCallback(const sensor_msgs::PointCloud2Ptr &cloud)
     static Eigen::Matrix4f previousLong = Eigen::MatrixXf::Zero(4, 4);
     double distance = sqrt(pow(sensorToWorld(0,3) - previousLong(0,3),2) +
                            pow(sensorToWorld(1,3) - previousLong(1,3),2));
-    if (distance > 1) {
+    if (distance > 4) {
         point3d sensor_org (sensorToWorld(0,3), sensorToWorld(1,3), sensorToWorld(2,3));
         updateMap(sensor_org);
         previousLong = sensorToWorld;
@@ -93,10 +92,8 @@ void DynamicServer::laserCallback(const sensor_msgs::PointCloud2Ptr &cloud)
     pcl::PassThrough<PCLPoint> pass_z;
     pass_z.setFilterFieldName("z");
     pass_z.setFilterLimits(m_pointcloudMinZ, m_pointcloudMaxZ);
-
     PCLPointCloud pc_ground; // segmented ground plane
     PCLPointCloud pc_nonground; // everything else
-
     if (m_filterGroundPlane){
       pass_x.setInputCloud(pc.makeShared());
       pass_x.filter(pc);
@@ -127,12 +124,67 @@ void DynamicServer::laserCallback(const sensor_msgs::PointCloud2Ptr &cloud)
       pc_nonground.header = pc.header;
     }
 
+<<<<<<< HEAD
     /// Step5 for the new Laser Scan, make the ICP alignment
 
     /// Step6 Insert the pointcloud
     insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
+=======
+    /// Step5 Insert the pointcloud
+//    insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
+>>>>>>> 50c4525eda70214ac379baf6e3de1b0d005404ca
     double total_elapsed = (ros::WallTime::now() - startTime).toSec();
     ROS_DEBUG("Pointcloud insertion in MapServer done (%zu+%zu pts (ground/nonground), %f sec)", pc_ground.size(), pc_nonground.size(), total_elapsed);
 
-    publishAll(cloud->header.stamp);
+    /// Step6 Insert the Time Labeled LaserScan
+    insertTimeScan(sensorToWorld, loam);
+    publishAll(loam->header.stamp);
+}
+
+void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::LoamScanPtr& loam)
+{
+
+    //! Step1 Extract out each occupied cells
+    point3d pOri(trans(0,3), trans(1,3), trans(2,3));
+    for(size_t i = 0 ; i < loam->Scans.size(); i++) {
+
+        doom::LaserScan scan = loam->Scans[i];
+        if (scan.Points[0].x <= 0.001) continue;
+
+        point3d pPrev;
+        KeySet occupied_cells;
+        for (size_t j = 0; j < scan.Points.size(); j++) {
+
+            if (scan.Points[j].x <= 0.001) continue;
+
+            // Transform the scan point into world frame
+            Eigen::Vector4f scan_point(scan.Points[j].x, scan.Points[j].y, scan.Points[j].z, 1);
+            Eigen::Vector4f result = trans * scan_point;
+            point3d pEnd(result(0), result(1), result(2));
+
+            m_octree->updateNode(pEnd, true);
+            continue;
+            if ((pEnd - pOri).norm() > 40) {
+              pEnd = pOri + (pEnd - pOri).normalized() * 40;
+            }
+
+            point3d pStart;
+            if (j == 0) {
+                pStart = point3d(trans(0,3), trans(1,3), result(2));
+                pPrev = pStart;
+            } else {
+                pStart = pPrev;
+            }
+            pPrev  = pEnd;
+
+            // only clear space (ground points)
+            if (m_octree->computeRayKeys(pStart, pEnd, m_keyRay)){
+                occupied_cells.insert(m_keyRay.begin(), m_keyRay.end());
+            }
+        }
+
+        for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
+          m_octree->updateNode(*it, true);
+        }
+    }
 }

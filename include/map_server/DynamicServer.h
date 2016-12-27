@@ -18,7 +18,7 @@ public:
 
     virtual ~DynamicServer() {}
 
-    void laserCallback        (const sensor_msgs::PointCloud2Ptr&     cloud);
+    void loamCallback        (const doom::LoamScanPtr&     loam);
 
 private:
 
@@ -28,6 +28,7 @@ private:
     void advertise();
 
     void updateMap(const point3d &sensorOrigin);
+    void insertTimeScan(const Eigen::Matrix4f &trans, const doom::LoamScanPtr& loam);
 
     int64_t timestamp_tolerance_ns_;
 
