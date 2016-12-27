@@ -125,7 +125,7 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
     }
 
     /// Step5 Insert the pointcloud
-    insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
+//    insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
     double total_elapsed = (ros::WallTime::now() - startTime).toSec();
     ROS_DEBUG("Pointcloud insertion in MapServer done (%zu+%zu pts (ground/nonground), %f sec)", pc_ground.size(), pc_nonground.size(), total_elapsed);
 
@@ -136,11 +136,48 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
 
 void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::LoamScanPtr& loam)
 {
+
+    //! Step1 Extract out each occupied cells
+    point3d pOri(trans(0,3), trans(1,3), trans(2,3));
     for(size_t i = 0 ; i < loam->Scans.size(); i++) {
 
-        std::cout << "For time id " << i << std::endl;
         doom::LaserScan scan = loam->Scans[i];
-        for (size_t j = 0; j < scan.Points.size(); j++)
-            std::cout << scan.Points[j] << std::endl;
+        if (scan.Points[0].x <= 0.001) continue;
+
+        point3d pPrev;
+        KeySet occupied_cells;
+        for (size_t j = 0; j < scan.Points.size(); j++) {
+
+            if (scan.Points[j].x <= 0.001) continue;
+
+            // Transform the scan point into world frame
+            Eigen::Vector4f scan_point(scan.Points[j].x, scan.Points[j].y, scan.Points[j].z, 1);
+            Eigen::Vector4f result = trans * scan_point;
+            point3d pEnd(result(0), result(1), result(2));
+
+            m_octree->updateNode(pEnd, true);
+            continue;
+            if ((pEnd - pOri).norm() > 40) {
+              pEnd = pOri + (pEnd - pOri).normalized() * 40;
+            }
+
+            point3d pStart;
+            if (j == 0) {
+                pStart = point3d(trans(0,3), trans(1,3), result(2));
+                pPrev = pStart;
+            } else {
+                pStart = pPrev;
+            }
+            pPrev  = pEnd;
+
+            // only clear space (ground points)
+            if (m_octree->computeRayKeys(pStart, pEnd, m_keyRay)){
+                occupied_cells.insert(m_keyRay.begin(), m_keyRay.end());
+            }
+        }
+
+        for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
+          m_octree->updateNode(*it, true);
+        }
     }
 }
