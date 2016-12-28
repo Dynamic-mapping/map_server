@@ -45,7 +45,7 @@ void DynamicServer::updateMap(const point3d &sensorOrigin)
 
         if(oldTree.isNodeOccupied(*it)){
 
-          if (sqrt(pow(it.getX() - sensorOrigin.x(),2) + pow(it.getY() - sensorOrigin.y(),2)) >= 40)
+          if (sqrt(pow(it.getX() - sensorOrigin.x(),2) + pow(it.getY() - sensorOrigin.y(),2)) >= MAP_RADIUS)
               continue;
           point3d old_point(it.getX(), it.getY(), it.getZ());
 
@@ -125,56 +125,93 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
     }
 
     /// Step5 Insert Pointcloud
-    insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
+//    insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
     double total_elapsed = (ros::WallTime::now() - startTime).toSec();
     ROS_DEBUG("Pointcloud insertion in MapServer done (%zu+%zu pts (ground/nonground), %f sec)", pc_ground.size(), pc_nonground.size(), total_elapsed);
 
     /// Step6 Insert the Time Labeled LaserScan
-//    insertTimeScan(sensorToWorld, loam);
+    insertTimeScan(sensorToWorld, loam);
     publishAll(loam->header.stamp);
 }
 
 void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::LoamScanPtr& loam)
 {
     //! Step1 Extract out each occupied cells
+    KeySet occupied_cells;
     point3d pOri(trans(0,3), trans(1,3), trans(2,3));
     for(size_t i = 0 ; i < loam->Scans.size(); i++) {
 
         doom::LaserScan scan = loam->Scans[i];
         if (fabs(scan.Points[0].x) <= 0.001) continue;
 
-        point3d pPrev;
-        KeySet occupied_cells;
-        for (size_t j = 0; j < scan.Points.size(); j++) {
+        point3d pPrev, pPrev_Prev;
+        int pre_valid = -1, pre_pre_valid = -1;
+        for (size_t j = 0; j < 6; j++) {
 
-            if (fabs(scan.Points[j].x) <= 0.001)
-                continue;
-            // Transform the scan point into world frame
-            Eigen::Vector4f scan_point(scan.Points[j].x, scan.Points[j].y, scan.Points[j].z, 1);
-            Eigen::Vector4f result = trans * scan_point;
-            point3d pEnd(result(0), result(1), result(2));
+            if (fabs(scan.Points[j].x) <= 0.001) {
 
-            if ((pEnd - pOri).norm() > 40) {
-              pEnd = pOri + (pEnd - pOri).normalized() * 40;
-            }
+                point3d pStart, pEnd;
+                if (j == 5 && pre_valid != -1) {
 
-            point3d pStart;
-            if (j == 0) {
-                pStart = point3d(trans(0,3), trans(1,3), result(2));
-                pPrev = pStart;
+                    pStart = pPrev;
+                    if (pre_pre_valid != -1) {
+
+                        point3d pNorm = (pPrev - pPrev_Prev).normalize();
+                        if (pNorm.z() > POINT_NORM) break;
+                        pEnd = pPrev_Prev + pNorm * (MAP_RADIUS - (pPrev_Prev - pOri).norm());
+                    } else {
+
+                        point3d pNorm = (pPrev - pOri).normalize();
+                        if (pNorm.z() > POINT_NORM) break;
+                        pEnd = pOri + pNorm * MAP_RADIUS;
+                    }
+
+                    // only clear space (ground points)
+                    if (m_octree->computeRayKeys(pStart, pEnd, m_keyRay)){
+                        occupied_cells.insert(m_keyRay.begin(), m_keyRay.end());
+                    }
+
+                    break;
+                }
             } else {
-                pStart = pPrev;
-            }
-            pPrev  = pEnd;
 
-            // only clear space (ground points)
-            if (m_octree->computeRayKeys(pStart, pEnd, m_keyRay)){
-                occupied_cells.insert(m_keyRay.begin(), m_keyRay.end());
+                if (pre_valid != -1) {
+                    pre_pre_valid = pre_valid;
+                    pPrev_Prev = pPrev;
+                }
+
+                // Transform the scan point into world frame
+                Eigen::Vector4f scan_point(scan.Points[j].x, scan.Points[j].y, scan.Points[j].z, 1);
+                Eigen::Vector4f result = trans * scan_point;
+                point3d pEnd(result(0), result(1), result(2));
+
+                point3d pNorm = (pEnd - pOri).normalized();
+                if (pNorm.z() > POINT_NORM) break;
+
+                if ((pEnd - pOri).norm() > MAP_RADIUS) {
+                  pEnd = pOri + pNorm * MAP_RADIUS;
+                }
+
+                point3d pStart;
+                if (j == 0) {
+                    pStart = point3d(trans(0,3), trans(1,3), result(2));
+                    pPrev = pStart;
+                } else {
+                    pStart = pPrev;
+                }
+                pPrev  = pEnd;
+                pre_valid = j;
+
+                // only clear space (ground points)
+                if (m_octree->computeRayKeys(pStart, pEnd, m_keyRay)){
+                    occupied_cells.insert(m_keyRay.begin(), m_keyRay.end());
+                }
             }
         }
+    }
 
-        for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
-          m_octree->updateNode(*it, true);
-        }
+    //! Step2 Upadte Occupied Cells
+    for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
+      m_octree->updateNode(*it, true);
     }
 }

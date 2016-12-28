@@ -84,6 +84,9 @@ const double    THRES_CURVA     = 0.2;
 const int       MAX_ITERATION   = 30;
 const float     LM_THRES        = 0.4;
 
+const float     POINT_NORM      = 0.02;
+const int       MAP_RADIUS      = 40;
+
 using std::sin;
 using std::cos;
 using std::atan2;
