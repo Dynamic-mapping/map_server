@@ -53,6 +53,10 @@ FILE(GLOB_RECURSE HEADER_LIST "include/map_server/*.h" "include/map_server/impl/
 #add_executable(map_server_node src/map_server_node.cpp ${HEADER_LIST})
 #target_link_libraries(map_server_node ${LINK_LIBS})
 
+#link_directories(${PCL_LIBRARY_DIRS} ${OCTOMAP_LIBRARY_DIRS})
+#add_executable(dynamic_node src/dynamic_node.cpp ${HEADER_LIST})
+#target_link_libraries(dynamic_node ${LINK_LIBS})
+
 link_directories(${PCL_LIBRARY_DIRS} ${OCTOMAP_LIBRARY_DIRS})
-add_executable(dynamic_node src/dynamic_node.cpp ${HEADER_LIST})
-target_link_libraries(dynamic_node ${LINK_LIBS})
+add_executable(kitti_node src/kitti_node.cpp ${HEADER_LIST})
+target_link_libraries(kitti_node ${LINK_LIBS})

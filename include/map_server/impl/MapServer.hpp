@@ -670,7 +670,6 @@ void MapServer::publishAll(const ros::Time& rostime){
 
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
   ROS_DEBUG("Map publishing in MapServer took %f sec", total_elapsed);
-
 }
 
 

@@ -1,0 +1,10 @@
+<!-- -->
+<launch>
+        <node pkg="map_server" type="kitti_node" name="kitti_map" output="screen">
+                <param name="resolution" value="0.4" />
+                <param name="vox" value="0.3" />
+                <param name="frame_id" type="string" value="world" />
+                <param name="sensor_model/max_range" value="50.0" />
+        </node>
+</launch>
+
