@@ -40,8 +40,8 @@
 #include <sensor_msgs/CameraInfo.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <doom/LaserScan.h>
-#include <doom/LoamScan.h>
+//#include <doom/LaserScan.h>
+//#include <doom/LoamScan.h>
 //#include <volumetric_msgs/SetBoxOccupancy.h>
 //#include <volumetric_msgs/SetDisplayBounds.h>
 
