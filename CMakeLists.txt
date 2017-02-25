@@ -19,7 +19,7 @@ set(PACKAGE_DEPENDENCIES
 
 find_package(catkin REQUIRED COMPONENTS ${PACKAGE_DEPENDENCIES})
 
-find_package(PCL REQUIRED QUIET COMPONENTS common sample_consensus io segmentation filters)
+find_package(PCL 1.8.0 EXACT REQUIRED QUIET COMPONENTS common sample_consensus io segmentation filters)
 
 find_package(octomap REQUIRED)
 add_definitions(-DOCTOMAP_NODEBUGOUT)

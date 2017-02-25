@@ -56,7 +56,6 @@ void DynamicServer::updateMap(const point3d &sensorOrigin)
 
 void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
 {
-
     /// Step1 Obtain the Pointcloud
     ros::WallTime startTime = ros::WallTime::now();
     PCLPointCloud pc; // input cloud for filtering and ground-detection
@@ -72,6 +71,7 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
     Eigen::Matrix4f sensorToWorld;
     pcl_ros::transformAsMatrix(sensorToWorldTf, sensorToWorld);
 
+    ROS_INFO_STREAM("new data with tf");
     /// Step3 If the pose has gone far enough, reset the map
     static Eigen::Matrix4f previousLong = Eigen::MatrixXf::Zero(4, 4);
     double distance = sqrt(pow(sensorToWorld(0,3) - previousLong(0,3),2) +
@@ -82,6 +82,7 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
         previousLong = sensorToWorld;
     }
 
+    ROS_INFO_STREAM("transform");
     /// Step4 set up filter for height range, also removes NANs:
     pcl::PassThrough<PCLPoint> pass_x;
     pass_x.setFilterFieldName("x");
@@ -124,6 +125,7 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
       pc_nonground.header = pc.header;
     }
 
+    ROS_INFO_STREAM("insert");
     /// Step5 Insert Pointcloud
     insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
     double total_elapsed = (ros::WallTime::now() - startTime).toSec();
@@ -143,6 +145,12 @@ void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::Loa
 
         doom::LaserScan scan = loam->Scans[i];
 
+        ROS_INFO_STREAM("" << i << " " << scan.Points.size());
+        for (size_t j = 0; j < scan.Points.size(); j++) {
+            std::cout << j << " " << scan.Points[j].x << " " << scan.Points[j].y << " " << scan.Points[j].z << std::endl;
+        }
+        ROS_INFO_STREAM("========================================");
+        continue;
         //! 1.1 If first point is missing, skip
         if (fabs(scan.Points[0].x) <= 0.001)
             continue;
