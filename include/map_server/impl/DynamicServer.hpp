@@ -2,6 +2,8 @@
 #include "map_server/DynamicServer.h"
 #include "common.h"
 
+//#define DEBUG
+
 using namespace map_server;
 
 void DynamicServer::init()
@@ -125,15 +127,28 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
       pc_nonground.header = pc.header;
     }
 
-    ROS_INFO_STREAM("insert");
     /// Step5 Insert Pointcloud
     insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
-    double total_elapsed = (ros::WallTime::now() - startTime).toSec();
-    ROS_DEBUG("Pointcloud insertion in MapServer done (%zu+%zu pts (ground/nonground), %f sec)", pc_ground.size(), pc_nonground.size(), total_elapsed);
 
     /// Step6 Insert the Time Labeled LaserScan
-    insertTimeScan(sensorToWorld, loam);
-    publishAll(loam->header.stamp);
+    //insertTimeScan(sensorToWorld, loam);
+    double total_elapsed = (ros::WallTime::now() - startTime).toSec();
+    ROS_INFO("Pointcloud insertion in MapServer done (%zu+%zu pts (ground/nonground), %f sec)", pc_ground.size(), pc_nonground.size(), total_elapsed);
+
+    PointCloud points;
+    for (OcTreeT::iterator it = m_octree->begin(m_maxTreeDepth), end=m_octree->end(); it != end; ++it) {
+        PointT point;
+        point.x = it.getX();
+        point.y = it.getY();
+        point.z = it.getZ();
+        points.push_back(point);
+    }
+
+    sensor_msgs::PointCloud2 cloud;
+    pcl::toROSMsg(points, cloud);
+    cloud.header.frame_id = "world";
+    cloud.header.stamp = loam->header.stamp;
+    pubCenterMap.publish(cloud);
 }
 
 void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::LoamScanPtr& loam)
@@ -145,32 +160,43 @@ void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::Loa
 
         doom::LaserScan scan = loam->Scans[i];
 
+#ifdef DEBUG
         ROS_INFO_STREAM("" << i << " " << scan.Points.size());
         for (size_t j = 0; j < scan.Points.size(); j++) {
             std::cout << j << " " << scan.Points[j].x << " " << scan.Points[j].y << " " << scan.Points[j].z << std::endl;
         }
         ROS_INFO_STREAM("========================================");
         continue;
-        //! 1.1 If first point is missing, skip
-        if (fabs(scan.Points[0].x) <= 0.001)
-            continue;
+#endif
 
+        /// Note for the velodyne64 laser, the in coming data is 1->3, -24->0 in degree
+        /// The closest point is at point[3], here we ignore the points in degree 1, 2, 3
+        //! 1.1 If first point is missing, skip
+        Eigen::Vector4f scan_point, result;
+        size_t start_id=3;
+        for (; start_id<scan.Points.size(); start_id++) {
+            if (fabs(scan.Points[start_id].x) <= 0.001) {
+                continue;
+            } else{
+                scan_point = Eigen::Vector4f(scan.Points[start_id].x, scan.Points[start_id].y, scan.Points[start_id].z, 1);
+                result = trans * scan_point;
+                break;
+            }
+        }
 
         //! 1.2 Caculate the Origional Ponint, and first point;
-        Eigen::Vector4f scan_point(scan.Points[0].x, scan.Points[0].y, scan.Points[0].z, 1);
-        Eigen::Vector4f result = trans * scan_point;
         point3d pStart(result(0), result(1), result(2));
         // If norm_z too bigger
         if ((pStart-pOri).normalize().z() > POINT_NORM)
             continue;
 
         point3d pEnd;
-        for (size_t j = 1; j < 7; j++) {
+        for (size_t j = start_id; j < 28; j++) {
 
             //! 1.2.1 not valid for point j
             if (fabs(scan.Points[j].x) <= 0.001) {
-
                 continue;
+                /*
                 // If is the end points
                 if (j == 6)
                 {
@@ -182,6 +208,7 @@ void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::Loa
                 } else {
                     continue;
                 }
+                */
             } else
             //! 1.2.1 valid for point j
             {
@@ -196,7 +223,7 @@ void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::Loa
                 // Check whether the pEnd within the map Area.
                 if(pNorm.norm() > (MAP_RADIUS - (pStart - pOri).norm())) {
 
-                    if (j==6)
+                    if (j==27)
                         pEnd = pStart + pNorm.normalize() * (MAP_RADIUS - (pStart - pOri).norm());
                     else
                         continue;
@@ -212,11 +239,12 @@ void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::Loa
         }
     }
 
+    ROS_INFO_STREAM("key size "<< occupied_cells.size());
     //! Step2 Upadte Occupied Cells
     for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
 
         point3d point = m_octree->keyToCoord(*it);
-        if ((point - pOri).norm() > MAP_RADIUS) continue;
+//        if ((point - pOri).norm() > MAP_RADIUS) continue;
 
         m_octree->updateNode(*it, true);
 
@@ -227,4 +255,5 @@ void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::Loa
             m_octree->updateNode(point, false);
         }
     }
+    ROS_INFO_STREAM("octree status "<<m_octree->memoryUsageNode() << " "<< m_octree->size());
 }
