@@ -25,12 +25,6 @@ void DynamicServer::subscribe()
                 "/dynamicMapping", 1, &DynamicServer::loamCallback, this);
 }
 
-void DynamicServer::advertise()
-{
-    pubCenterMap = nh_.advertise<sensor_msgs::PointCloud2>(
-                "centerMap", 1);
-}
-
 void DynamicServer::updateMap(const point3d &sensorOrigin)
 {
     /// Transform Checking
@@ -60,8 +54,18 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
 {
     /// Step1 Obtain the Pointcloud
     ros::WallTime startTime = ros::WallTime::now();
-    PCLPointCloud pc; // input cloud for filtering and ground-detection
+    PointCloud pc; // input cloud for filtering and ground-detection
     pcl::fromROSMsg(loam->cloud, pc);
+    ROS_INFO_STREAM("Before filtering " << pc.size());
+
+    /// vox filter
+    PointCloudPtr voxIn (new PointCloud);
+    *voxIn = pc;
+    pcl::VoxelGrid<PointT> vox_filter;
+    vox_filter.setInputCloud(voxIn);
+    vox_filter.setLeafSize(0.3, 0.3, 0.3);
+    vox_filter.filter(pc);
+    ROS_INFO_STREAM("After filtering " << pc.size());
 
     /// Step2 Extract the transformation from tf
     tf::StampedTransform sensorToWorldTf;
@@ -83,72 +87,91 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
         updateMap(sensor_org);
         previousLong = sensorToWorld;
     }
-
-    ROS_INFO_STREAM("transform");
-    /// Step4 set up filter for height range, also removes NANs:
-    pcl::PassThrough<PCLPoint> pass_x;
-    pass_x.setFilterFieldName("x");
-    pass_x.setFilterLimits(m_pointcloudMinX, m_pointcloudMaxX);
-    pcl::PassThrough<PCLPoint> pass_y;
-    pass_y.setFilterFieldName("y");
-    pass_y.setFilterLimits(m_pointcloudMinY, m_pointcloudMaxY);
-    pcl::PassThrough<PCLPoint> pass_z;
-    pass_z.setFilterFieldName("z");
-    pass_z.setFilterLimits(m_pointcloudMinZ, m_pointcloudMaxZ);
-    PCLPointCloud pc_ground; // segmented ground plane
-    PCLPointCloud pc_nonground; // everything else
-    if (m_filterGroundPlane){
-      pass_x.setInputCloud(pc.makeShared());
-      pass_x.filter(pc);
-      pass_y.setInputCloud(pc.makeShared());
-      pass_y.filter(pc);
-      pass_z.setInputCloud(pc.makeShared());
-      pass_z.filter(pc);
-      filterGroundPlane(pc, pc_ground, pc_nonground);
-
-      // transform clouds to world frame for insertion
-      pcl::transformPointCloud(pc_ground, pc_ground, sensorToWorld);
-      pcl::transformPointCloud(pc_nonground, pc_nonground, sensorToWorld);
-    } else {
-      // directly transform to map frame:
-      pcl::transformPointCloud(pc, pc, sensorToWorld);
-
-      // just filter height range:
-      pass_x.setInputCloud(pc.makeShared());
-      pass_x.filter(pc);
-      pass_y.setInputCloud(pc.makeShared());
-      pass_y.filter(pc);
-      pass_z.setInputCloud(pc.makeShared());
-      pass_z.filter(pc);
-
-      pc_nonground = pc;
-      // pc_nonground is empty without ground segmentation
-      pc_ground.header = pc.header;
-      pc_nonground.header = pc.header;
-    }
+    pcl::transformPointCloud(pc, pc, sensorToWorld);
 
     /// Step5 Insert Pointcloud
-    insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
+    insertPC(sensorToWorld, pc);
 
     /// Step6 Insert the Time Labeled LaserScan
     //insertTimeScan(sensorToWorld, loam);
     double total_elapsed = (ros::WallTime::now() - startTime).toSec();
-    ROS_INFO("Pointcloud insertion in MapServer done (%zu+%zu pts (ground/nonground), %f sec)", pc_ground.size(), pc_nonground.size(), total_elapsed);
+    ROS_INFO("Pointcloud insertion in MapServer done (%zu pts, %f sec)", pc.size(), total_elapsed);
 
-    PointCloud points;
-    for (OcTreeT::iterator it = m_octree->begin(m_maxTreeDepth), end=m_octree->end(); it != end; ++it) {
-        PointT point;
-        point.x = it.getX();
-        point.y = it.getY();
-        point.z = it.getZ();
-        points.push_back(point);
+    publishAll(loam->header.stamp);
+
+//    PointCloud points;
+//    for (OcTreeT::iterator it = m_octree->begin(m_maxTreeDepth), end=m_octree->end(); it != end; ++it) {
+//        PointT point;
+//        point.x = it.getX();
+//        point.y = it.getY();
+//        point.z = it.getZ();
+//        points.push_back(point);
+//    }
+
+//    sensor_msgs::PointCloud2 cloud_msg;
+//    pcl::toROSMsg(pc, cloud_msg);
+//    cloud_msg.header.frame_id = "world";
+//    cloud_msg.header.stamp = loam->header.stamp;
+//    pubCenterMap.publish(cloud_msg);
+}
+
+void DynamicServer::insertPC(const Eigen::Matrix4f &trans, const PointCloud &pc)
+{
+    ROS_INFO("detected points and begin to insert");
+
+    //! Step1 Extract out each occupied cells
+    KeySet free_cells, occupied_cells;
+    point3d pOri(trans(0,3), trans(1, 3), trans(2, 3));
+
+    // free on ray, occupied on endpoint:
+    for (PCLPointCloud::const_iterator it = pc.begin(); it != pc.end(); ++it){
+      point3d point(it->x, it->y, it->z);
+      // maxrange check
+      if ((m_maxRange < 0.0) || ((point - pOri).norm() <= m_maxRange) ) {
+
+        // free cells
+        if (m_octree->computeRayKeys(pOri, point, m_keyRay)){
+          free_cells.insert(m_keyRay.begin(), m_keyRay.end());
+        }
+        // occupied endpoint
+        OcTreeKey key;
+        if (m_octree->coordToKeyChecked(point, key)){
+          occupied_cells.insert(key);
+
+          updateMinKey(key, m_updateBBXMin);
+          updateMaxKey(key, m_updateBBXMax);
+        }
+      } else {// ray longer than maxrange:;
+        point3d new_end = pOri + (point - pOri).normalized() * m_maxRange;
+        if (m_octree->computeRayKeys(pOri, new_end, m_keyRay)){
+          free_cells.insert(m_keyRay.begin(), m_keyRay.end());
+
+          octomap::OcTreeKey endKey;
+          if (m_octree->coordToKeyChecked(new_end, endKey)){
+            free_cells.insert(endKey);
+            updateMinKey(endKey, m_updateBBXMin);
+            updateMaxKey(endKey, m_updateBBXMax);
+          } else{
+            ROS_ERROR_STREAM("Could not generate Key for endpoint "<<new_end);
+          }
+        }
+      }
     }
 
-    sensor_msgs::PointCloud2 cloud;
-    pcl::toROSMsg(points, cloud);
-    cloud.header.frame_id = "world";
-    cloud.header.stamp = loam->header.stamp;
-    pubCenterMap.publish(cloud);
+    // mark free cells only if not seen occupied in this cloud
+    for(KeySet::iterator it = free_cells.begin(), end=free_cells.end(); it!= end; ++it){
+      if (occupied_cells.find(*it) == occupied_cells.end()){
+            m_octree->updateNode(*it, false);
+      }
+    }
+
+    // now mark all occupied cells:
+    for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
+        point3d point = m_octree->keyToCoord(*it);
+        if ((point - pOri).norm() > MAP_RADIUS) continue;
+        m_octree->updateNode(*it, true);
+    }
+
 }
 
 void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::LoamScanPtr& loam)

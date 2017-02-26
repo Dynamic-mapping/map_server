@@ -13,7 +13,6 @@ public:
         readParameters();
         init();
         subscribe();
-        advertise();
     }
 
     virtual ~DynamicServer() {}
@@ -25,9 +24,9 @@ private:
     void init();
     void readParameters();
     void subscribe();
-    void advertise();
 
     void updateMap(const point3d &sensorOrigin);
+    void insertPC(const Eigen::Matrix4f &trans, const PointCloud &pc);
     void insertTimeScan(const Eigen::Matrix4f &trans, const doom::LoamScanPtr& loam);
 
     int64_t timestamp_tolerance_ns_;
