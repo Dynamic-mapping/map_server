@@ -77,7 +77,6 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
     Eigen::Matrix4f sensorToWorld;
     pcl_ros::transformAsMatrix(sensorToWorldTf, sensorToWorld);
 
-    ROS_INFO_STREAM("new data with tf");
     /// Step3 If the pose has gone far enough, reset the map
     static Eigen::Matrix4f previousLong = Eigen::MatrixXf::Zero(4, 4);
     double distance = sqrt(pow(sensorToWorld(0,3) - previousLong(0,3),2) +
@@ -93,26 +92,12 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
     insertPC(sensorToWorld, pc);
 
     /// Step6 Insert the Time Labeled LaserScan
-    //insertTimeScan(sensorToWorld, loam);
+    insertTimeScan(sensorToWorld, loam);
+
     double total_elapsed = (ros::WallTime::now() - startTime).toSec();
     ROS_INFO("Pointcloud insertion in MapServer done (%zu pts, %f sec)", pc.size(), total_elapsed);
 
     publishAll(loam->header.stamp);
-
-//    PointCloud points;
-//    for (OcTreeT::iterator it = m_octree->begin(m_maxTreeDepth), end=m_octree->end(); it != end; ++it) {
-//        PointT point;
-//        point.x = it.getX();
-//        point.y = it.getY();
-//        point.z = it.getZ();
-//        points.push_back(point);
-//    }
-
-//    sensor_msgs::PointCloud2 cloud_msg;
-//    pcl::toROSMsg(pc, cloud_msg);
-//    cloud_msg.header.frame_id = "world";
-//    cloud_msg.header.stamp = loam->header.stamp;
-//    pubCenterMap.publish(cloud_msg);
 }
 
 void DynamicServer::insertPC(const Eigen::Matrix4f &trans, const PointCloud &pc)
@@ -178,7 +163,9 @@ void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::Loa
 {
     //! Step1 Extract out each occupied cells
     KeySet occupied_cells;
-    point3d pOri(trans(0,3), trans(1, 3), trans(2, 3));
+    point3d pOri(trans(0,3), trans(1, 3), trans(2, 3)-CAR_HEIGHT);
+
+    ROS_INFO_STREAM("pOri " << pOri.z());
     for(size_t i = 0 ; i < loam->Scans.size(); i++) {
 
         doom::LaserScan scan = loam->Scans[i];
@@ -193,8 +180,10 @@ void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::Loa
 #endif
 
         /// Note for the velodyne64 laser, the in coming data is 1->3, -24->0 in degree
-        /// The closest point is at point[3], here we ignore the points in degree 1, 2, 3
-        //! 1.1 If first point is missing, skip
+        /// The closest point is at point[3], here we only use the points on the plane
+        /// Angle from -24 degree to -10 degree
+
+        //! 1.1 Find the first hit points
         Eigen::Vector4f scan_point, result;
         size_t start_id=3;
         for (; start_id<scan.Points.size(); start_id++) {
@@ -214,7 +203,7 @@ void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::Loa
             continue;
 
         point3d pEnd;
-        for (size_t j = start_id; j < 28; j++) {
+        for (size_t j = start_id; j < 27; j++) {
 
             //! 1.2.1 not valid for point j
             if (fabs(scan.Points[j].x) <= 0.001) {
@@ -246,7 +235,7 @@ void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::Loa
                 // Check whether the pEnd within the map Area.
                 if(pNorm.norm() > (MAP_RADIUS - (pStart - pOri).norm())) {
 
-                    if (j==27)
+                    if (j==26)
                         pEnd = pStart + pNorm.normalize() * (MAP_RADIUS - (pStart - pOri).norm());
                     else
                         continue;
@@ -267,7 +256,7 @@ void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::Loa
     for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
 
         point3d point = m_octree->keyToCoord(*it);
-//        if ((point - pOri).norm() > MAP_RADIUS) continue;
+        if ((point - pOri).norm() > MAP_RADIUS) continue;
 
         m_octree->updateNode(*it, true);
 
