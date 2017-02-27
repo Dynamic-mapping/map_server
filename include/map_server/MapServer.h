@@ -35,6 +35,7 @@
 #include <octomap/octomap.h>
 #include <octomap/OcTreeKey.h>
 
+
 #ifdef COLOR_OCTOMAP_SERVER
 #include <octomap/ColorOcTree.h>
 #endif

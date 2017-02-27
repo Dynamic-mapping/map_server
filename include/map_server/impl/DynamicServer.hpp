@@ -147,13 +147,40 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
     double total_elapsed = (ros::WallTime::now() - startTime).toSec();
     ROS_INFO("Pointcloud insertion in MapServer done (%zu pts, %f sec)", pc.size(), total_elapsed);
 
-    publishAll(loam->header.stamp);
+//    publishAll(loam->header.stamp);
     sensor_msgs::PointCloud2 dy_out;
     pcl::toROSMsg (dy_pc, dy_out);
     dy_out.header.frame_id = "world";
     dy_out.header.stamp = loam->header.stamp;
     pub_dy.publish(dy_out);
 
+    // publish Color Points
+    PointCloudColor cloud_map;
+    double pose_z = sensorToWorld(2,3);
+    for (OcTreeT::iterator it = m_octree->begin(m_maxTreeDepth),
+        end = m_octree->end(); it != end; ++it)
+    {
+        if (m_octree->isNodeOccupied(*it) &&
+               it.getZ() > (pose_z - 2) &&
+                it.getZ() < (pose_z + 4)){
+
+            PointColor point;
+            point.x = it.getX();
+            point.y = it.getY();
+            point.z = it.getZ();
+            point.r = 255;
+            point.g = (it.getZ()-pose_z + 2.0)/6.0*255;
+            point.b = (it.getZ()-pose_z + 2.0)/6.0*255;
+            cloud_map.push_back(point);
+        }
+    }
+    sensor_msgs::PointCloud2 map_out;
+    pcl::toROSMsg (cloud_map, map_out);
+    map_out.header.frame_id = "world";
+    map_out.header.stamp = loam->header.stamp;
+    pub_map.publish(map_out);
+
+    return;
 }
 
 void DynamicServer::checkDiff(const Eigen::Matrix4f &trans)

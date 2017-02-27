@@ -24,7 +24,8 @@ public:
         cur_tree->setClampingThresMin(thresMin);
         cur_tree->setClampingThresMax(thresMax);
 
-        pub_dy = nh_.advertise<sensor_msgs::PointCloud2>("dy_obj", 1);
+        pub_dy  = nh_.advertise<sensor_msgs::PointCloud2>("dy_obj", 1);
+        pub_map = nh_.advertise<sensor_msgs::PointCloud2>("map", 1);
 
         // initialize octomap object & params
         readParameters();
@@ -56,6 +57,7 @@ protected:
     ros::NodeHandle nh_;
     ros::Subscriber subCloud;
     ros::Publisher  pub_dy;
+    ros::Publisher  pub_map;
 
     // PreOctree
     octomap::OcTree* cur_tree;

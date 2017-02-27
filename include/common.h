@@ -105,6 +105,7 @@ enum LABEL {NON, CORNER, CORNER_LESS, SURF, SURF_LESS};
 
 // tfpedef for pcl
 typedef pcl::PointXYZ PointT;
+typedef pcl::PointXYZRGB PointColor;
 typedef pcl::PointXYZI PointTI;
 typedef pcl::PointXY PointPlane;
 typedef pcl::PointNormal PointN;
@@ -114,6 +115,8 @@ typedef pcl::PointCloud<PointTI>::ConstPtr PointCloudIConstPtr;
 typedef pcl::PointCloud<PointT> PointCloud;
 typedef pcl::PointCloud<PointT>::Ptr PointCloudPtr;
 typedef pcl::PointCloud<PointT>::ConstPtr PointCloudConstPtr;
+typedef pcl::PointCloud<PointColor> PointCloudColor;
+typedef pcl::PointCloud<PointColor>::Ptr PointCloudColorPtr;
 typedef pcl::PointCloud<int> PointCloudIndex;
 typedef pcl::ModelCoefficients::Ptr ModelPtr;
 typedef pcl::KdTreeFLANN<PointT> KDtree;
