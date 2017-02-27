@@ -8,8 +8,25 @@ class DynamicServer: public MapServer {
 public:
     DynamicServer(ros::NodeHandle nh)
         : nh_(nh),
+          cur_tree(NULL),
           timestamp_tolerance_ns_(200000000)
+
     {
+        double probHit, probMiss, thresMin, thresMax;
+        nh_.param("sensor_model/hit", probHit, 0.7);
+        nh_.param("sensor_model/miss", probMiss, 0.4);
+        nh_.param("sensor_model/min", thresMin, 0.12);
+        nh_.param("sensor_model/max", thresMax, 0.97);
+
+        cur_tree = new OcTreeT(m_res);
+        cur_tree->setProbHit(probHit);
+        cur_tree->setProbMiss(probMiss);
+        cur_tree->setClampingThresMin(thresMin);
+        cur_tree->setClampingThresMax(thresMax);
+
+        pub_dy = nh_.advertise<sensor_msgs::PointCloud2>("dy_obj", 1);
+
+        // initialize octomap object & params
         readParameters();
         init();
         subscribe();
@@ -26,7 +43,8 @@ private:
     void subscribe();
 
     void updateMap(const point3d &sensorOrigin);
-    void insertPC(const Eigen::Matrix4f &trans, const PointCloud &pc);
+    void insertPC(const Eigen::Matrix4f &trans, const PointCloud &pc, OcTreeT *tree);
+    void checkDiff(const Eigen::Matrix4f &trans);
     void insertTimeScan(const Eigen::Matrix4f &trans, const doom::LoamScanPtr& loam);
 
     int64_t timestamp_tolerance_ns_;
@@ -37,8 +55,14 @@ protected:
     std::string change_id_frame;
     ros::NodeHandle nh_;
     ros::Subscriber subCloud;
-    ros::Publisher  pubCenterMap;
+    ros::Publisher  pub_dy;
 
+    // PreOctree
+    octomap::OcTree* cur_tree;
+
+    // Pointcloud
+    PointCloud  dy_pc;
+    // tf
     tf::TransformBroadcaster tf_broader_;
 
     // G is the fixed Ground frame, B is the body frame of the robot, S is the

@@ -38,13 +38,10 @@ void DynamicServer::updateMap(const point3d &sensorOrigin)
     OcTreeT oldTree = *m_octree;
     m_octree->clear();
     for (OcTree::leaf_iterator it = oldTree.begin(); it != oldTree.end(); it++) {
-
         if(oldTree.isNodeOccupied(*it)){
-
           if (sqrt(pow(it.getX() - sensorOrigin.x(),2) + pow(it.getY() - sensorOrigin.y(),2)) >= MAP_RADIUS)
               continue;
           point3d old_point(it.getX(), it.getY(), it.getZ());
-
           m_octree->updateNode(old_point, true);
         }
     }
@@ -58,26 +55,64 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
     pcl::fromROSMsg(loam->cloud, pc);
     ROS_INFO_STREAM("Before filtering " << pc.size());
 
-    /// vox filter
+    /// Step2 vox filter
     PointCloudPtr voxIn (new PointCloud);
     *voxIn = pc;
     pcl::VoxelGrid<PointT> vox_filter;
     vox_filter.setInputCloud(voxIn);
-    vox_filter.setLeafSize(0.3, 0.3, 0.3);
+    vox_filter.setLeafSize(m_res-0.1, m_res-0.1, m_res-0.1);
     vox_filter.filter(pc);
     ROS_INFO_STREAM("After filtering " << pc.size());
 
-    /// Step2 Extract the transformation from tf
+    /// Step3 Extract the transformation from tf
     tf::StampedTransform sensorToWorldTf;
     try {
       m_tfListener.lookupTransform(m_worldFrameId, loam->header.frame_id, loam->header.stamp, sensorToWorldTf);
     } catch(tf::TransformException& ex){
       return;
     }
+    static Eigen::Matrix4f preLoc = Eigen::MatrixXf::Zero(4, 4);
+    static bool init_flag = 0;
+
     Eigen::Matrix4f sensorToWorld;
     pcl_ros::transformAsMatrix(sensorToWorldTf, sensorToWorld);
+    pcl::transformPointCloud(pc, pc, sensorToWorld);
 
-    /// Step3 If the pose has gone far enough, reset the map
+    /// Step4 check ground
+    pcl::SACSegmentation<pcl::PointXYZ> seg;
+    pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
+    pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+    PointCloud pc_ground, pc_nonground;
+    PointCloudPtr pc_in (new PointCloud);
+    *pc_in = pc;
+
+    // Set all the parameters for plane fitting
+    seg.setOptimizeCoefficients(true);
+    seg.setModelType (pcl::SACMODEL_PLANE);
+    seg.setMethodType (pcl::SAC_RANSAC);
+    seg.setMaxIterations (100);
+    seg.setDistanceThreshold (0.2);
+
+    // Segment the largest planar component from the remaining cloud
+    seg.setInputCloud(pc_in);
+    seg.segment(*inliers, *coefficients);
+
+    // Extract the planar inliers from the input cloud
+    pcl::ExtractIndices<pcl::PointXYZ> extract;
+    extract.setInputCloud(pc_in);
+    extract.setIndices(inliers);
+
+    // Get the points associated with the planar surface
+    extract.setNegative(false);
+    extract.filter(pc_ground);
+
+    // Remove the planar inliers, extract the rest
+    extract.setNegative(true);
+    extract.filter(pc_nonground);
+
+    ROS_INFO_STREAM("pc "<< pc.size() << " ground " << pc_ground.size() << " nonground " << pc_nonground.size());
+
+    /// Step5 If the pose has gone far enough, reset the map
     static Eigen::Matrix4f previousLong = Eigen::MatrixXf::Zero(4, 4);
     double distance = sqrt(pow(sensorToWorld(0,3) - previousLong(0,3),2) +
                            pow(sensorToWorld(1,3) - previousLong(1,3),2));
@@ -86,24 +121,68 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
         updateMap(sensor_org);
         previousLong = sensorToWorld;
     }
-    pcl::transformPointCloud(pc, pc, sensorToWorld);
+
+    /// Step6 Check whether initialization
+    if (!init_flag) {
+        ROS_INFO("first initial");
+        init_flag = 1;
+        preLoc = sensorToWorld;
+        return;
+    }
+
+    /// Step6 Check the difference between new PC and pre_octree
+    cur_tree->clear();
+    dy_pc.clear();
+    insertPC(sensorToWorld, pc_nonground, cur_tree);
+    checkDiff(preLoc);
+
 
     /// Step5 Insert Pointcloud
-    insertPC(sensorToWorld, pc);
-
-    /// Step6 Insert the Time Labeled LaserScan
+    insertPC(sensorToWorld, pc, m_octree);
     insertTimeScan(sensorToWorld, loam);
+
+    /// Done extraction
+    preLoc = sensorToWorld;
 
     double total_elapsed = (ros::WallTime::now() - startTime).toSec();
     ROS_INFO("Pointcloud insertion in MapServer done (%zu pts, %f sec)", pc.size(), total_elapsed);
 
     publishAll(loam->header.stamp);
+    sensor_msgs::PointCloud2 dy_out;
+    pcl::toROSMsg (dy_pc, dy_out);
+    dy_out.header.frame_id = "world";
+    dy_out.header.stamp = loam->header.stamp;
+    pub_dy.publish(dy_out);
+
 }
 
-void DynamicServer::insertPC(const Eigen::Matrix4f &trans, const PointCloud &pc)
+void DynamicServer::checkDiff(const Eigen::Matrix4f &trans)
 {
-    ROS_INFO("detected points and begin to insert");
 
+    /// Potential status of pre and current occupancy state
+    /// St-1   St   State
+    /// 0      0    Nothing
+    /// 0      1    Unknown
+    /// 1      0    Potential dynamics
+    /// 1      1    Potential Statics
+
+    // mark free cells with the pre_octree
+    for(OcTree::iterator it = m_octree->begin(); it != m_octree->end(); ++it){
+
+        if (!m_octree->isNodeOccupied(*it)){
+
+            point3d pt = it.getCoordinate();
+            OcTreeNode* node = cur_tree->search(pt);
+            if (node && cur_tree->isNodeOccupied(node)){
+                PointT pc_point(pt.x(), pt.y(), pt.z());
+                dy_pc.push_back(pc_point);
+            }
+        }
+    }
+}
+
+void DynamicServer::insertPC(const Eigen::Matrix4f &trans, const PointCloud &pc, OcTreeT *tree)
+{
     //! Step1 Extract out each occupied cells
     KeySet free_cells, occupied_cells;
     point3d pOri(trans(0,3), trans(1, 3), trans(2, 3));
@@ -115,12 +194,12 @@ void DynamicServer::insertPC(const Eigen::Matrix4f &trans, const PointCloud &pc)
       if ((m_maxRange < 0.0) || ((point - pOri).norm() <= m_maxRange) ) {
 
         // free cells
-        if (m_octree->computeRayKeys(pOri, point, m_keyRay)){
+        if (tree->computeRayKeys(pOri, point, m_keyRay)){
           free_cells.insert(m_keyRay.begin(), m_keyRay.end());
         }
         // occupied endpoint
         OcTreeKey key;
-        if (m_octree->coordToKeyChecked(point, key)){
+        if (tree->coordToKeyChecked(point, key)){
           occupied_cells.insert(key);
 
           updateMinKey(key, m_updateBBXMin);
@@ -128,11 +207,11 @@ void DynamicServer::insertPC(const Eigen::Matrix4f &trans, const PointCloud &pc)
         }
       } else {// ray longer than maxrange:;
         point3d new_end = pOri + (point - pOri).normalized() * m_maxRange;
-        if (m_octree->computeRayKeys(pOri, new_end, m_keyRay)){
+        if (tree->computeRayKeys(pOri, new_end, m_keyRay)){
           free_cells.insert(m_keyRay.begin(), m_keyRay.end());
 
           octomap::OcTreeKey endKey;
-          if (m_octree->coordToKeyChecked(new_end, endKey)){
+          if (tree->coordToKeyChecked(new_end, endKey)){
             free_cells.insert(endKey);
             updateMinKey(endKey, m_updateBBXMin);
             updateMaxKey(endKey, m_updateBBXMax);
@@ -143,18 +222,32 @@ void DynamicServer::insertPC(const Eigen::Matrix4f &trans, const PointCloud &pc)
       }
     }
 
+    // mark free cells with the pre_octree
+    for(OcTree::iterator it = cur_tree->begin(); it != cur_tree->end(); ++it){
+        if (!cur_tree->isNodeOccupied(*it)){
+            point3d pt = it.getCoordinate();
+            OcTreeNode* node = tree->search(pt);
+            if (node && tree->isNodeOccupied(node)){
+                OcTreeKey key;
+                if (tree->coordToKeyChecked(pt, key)){
+                  free_cells.insert(key);
+                }
+            }
+        }
+    }
+
     // mark free cells only if not seen occupied in this cloud
     for(KeySet::iterator it = free_cells.begin(), end=free_cells.end(); it!= end; ++it){
       if (occupied_cells.find(*it) == occupied_cells.end()){
-            m_octree->updateNode(*it, false);
+            tree->updateNode(*it, false);
       }
     }
 
     // now mark all occupied cells:
     for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
-        point3d point = m_octree->keyToCoord(*it);
+        point3d point = tree->keyToCoord(*it);
         if ((point - pOri).norm() > MAP_RADIUS) continue;
-        m_octree->updateNode(*it, true);
+        tree->updateNode(*it, true);
     }
 
 }
@@ -208,19 +301,6 @@ void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::Loa
             //! 1.2.1 not valid for point j
             if (fabs(scan.Points[j].x) <= 0.001) {
                 continue;
-                /*
-                // If is the end points
-                if (j == 6)
-                {
-                    pEnd = pStart + (pStart - pOri).normalize() * (MAP_RADIUS - (pStart - pOri).norm());
-                    if (m_octree->computeRayKeys(pStart, pEnd, m_keyRay)){
-                        occupied_cells.insert(m_keyRay.begin(), m_keyRay.end());
-                    }
-
-                } else {
-                    continue;
-                }
-                */
             } else
             //! 1.2.1 valid for point j
             {
