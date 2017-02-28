@@ -162,15 +162,26 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
     {
         if (m_octree->isNodeOccupied(*it) &&
                it.getZ() > (pose_z - 2) &&
-                it.getZ() < (pose_z + 4)){
+                it.getZ() < (pose_z + 2)){
 
             PointColor point;
             point.x = it.getX();
             point.y = it.getY();
             point.z = it.getZ();
-            point.r = 255;
-            point.g = (it.getZ()-pose_z + 2.0)/6.0*255;
-            point.b = (it.getZ()-pose_z + 2.0)/6.0*255;
+            double color = (it.getZ()-pose_z+1)/4.0*255;
+            if (color > 0.9){
+                point.r = 0;
+                point.g = 250;
+                point.b = 0;
+            }else if(color > 0.66){
+                point.r = 0;
+                point.g = 0;
+                point.b = 250;
+            }else {
+                point.r = 250;
+                point.g = 0;
+                point.b = 0;
+            }
             cloud_map.push_back(point);
         }
     }
