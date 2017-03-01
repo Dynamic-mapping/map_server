@@ -64,17 +64,24 @@
 
 // PCL LIB
 #include <pcl_conversions/pcl_conversions.h>
-#include <pcl/common/transforms.h>
-#include <pcl/conversions.h>
 #include <pcl_ros/point_cloud.h>
 #include <pcl_ros/transforms.h>
-#include <pcl/filters/voxel_grid.h>
-#include <pcl/filters/filter.h>
-#include <pcl/kdtree/kdtree_flann.h>
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
-#include <pcl/registration/icp.h>
-#include <pcl/io/ply_io.h>
+#include <pcl-1.8/pcl/common/transforms.h>
+#include <pcl-1.8/pcl/conversions.h>
+#include <pcl-1.8/pcl/filters/voxel_grid.h>
+#include <pcl-1.8/pcl/filters/filter.h>
+#include <pcl-1.8/pcl/filters/extract_indices.h>
+#include <pcl-1.8/pcl/kdtree/kdtree_flann.h>
+#include <pcl-1.8/pcl/point_cloud.h>
+#include <pcl-1.8/pcl/point_types.h>
+#include <pcl-1.8/pcl/registration/icp.h>
+#include <pcl-1.8/pcl/io/ply_io.h>
+
+#include <pcl/search/kdtree.h>
+#include <pcl/kdtree/kdtree.h>
+#include <pcl/search/impl/kdtree.hpp>
+#include <pcl/segmentation/extract_clusters.h>
+#include <pcl/segmentation/impl/extract_clusters.hpp>
 
 const int       IMU_QUE_LEN     = 200;
 const int       N_SCANS         = 16;
@@ -86,7 +93,7 @@ const float     LM_THRES        = 0.4;
 const float     CAR_HEIGHT      = 1.6;
 const float     POINT_NORM      = 0.1;
 
-const int       MAP_RADIUS      = 40;
+const int       MAP_RADIUS      = 80;
 
 using std::sin;
 using std::cos;
@@ -284,3 +291,44 @@ void eigenToGeo(const Transformation &trans_mat, geometry_msgs::Transform *trans
     return;
 }
 
+void voxFilter(PointCloudPtr &cloud, double res)
+{
+    pcl::VoxelGrid<PointT> vox_filter;
+    vox_filter.setInputCloud(cloud);
+    vox_filter.setLeafSize(res, res, res);
+    vox_filter.filter(*cloud);
+    return;
+}
+
+void groundFilter(const PointCloudPtr &cloud, PointCloud &ground, PointCloud &nonground)
+{
+    pcl::SACSegmentation<pcl::PointXYZ> seg;
+    pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
+    pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+
+
+    // Set all the parameters for plane fitting
+    seg.setOptimizeCoefficients(true);
+    seg.setModelType (pcl::SACMODEL_PLANE);
+    seg.setMethodType (pcl::SAC_RANSAC);
+    seg.setMaxIterations (100);
+    seg.setDistanceThreshold (0.2);
+
+    // Segment the largest planar component from the remaining cloud
+    seg.setInputCloud(cloud);
+    seg.segment(*inliers, *coefficients);
+
+    // Extract the planar inliers from the input cloud
+    pcl::ExtractIndices<pcl::PointXYZ> extract;
+    extract.setInputCloud(cloud);
+    extract.setIndices(inliers);
+
+    // Get the points associated with the planar surface
+    extract.setNegative(false);
+    extract.filter(ground);
+
+    // Remove the planar inliers, extract the rest
+    extract.setNegative(true);
+    extract.filter(nonground);
+    return;
+}
