@@ -38,6 +38,7 @@
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/CameraInfo.h>
+#include <sensor_msgs/Image.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <doom/LaserScan.h>
@@ -58,6 +59,10 @@
 #include <octomap_msgs/GetOctomap.h>
 
 // OPENCV LIB
+#include <image_transport/image_transport.h>
+#include <cv_bridge/cv_bridge.h>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/opencv.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/core/eigen.hpp>

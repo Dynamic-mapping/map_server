@@ -8,6 +8,7 @@ class DynamicServer: public MapServer {
 public:
     DynamicServer(ros::NodeHandle nh)
         : nh_(nh),
+          imgNode_(nh),
           cur_scan(NULL),
           timestamp_tolerance_ns_(200000000)
 
@@ -28,6 +29,7 @@ public:
 
         pub_dy   = nh_.advertise<sensor_msgs::PointCloud2>("dy_obj", 1);
         pub_map  = nh_.advertise<sensor_msgs::PointCloud2>("map", 1);
+        pub_img  = imgNode_.advertise("map_img", 1);
         subCloud = nh_.subscribe(
                     "/dynamicMapping", 1, &DynamicServer::loamCallback, this);
 
@@ -62,15 +64,20 @@ private:
         return;
     }
 
-    void publishCloud(const ros::Time& rostime, double pose_z)
+    void publishCloud(const ros::Time& rostime, Eigen::Matrix4f pose)
     {
+        double pose_x = pose(0,3);
+        double pose_y = pose(1,3);
+        double pose_z = pose(2,3);
+
         sensor_msgs::PointCloud2 dy_out;
         pcl::toROSMsg (dy_pc, dy_out);
         dy_out.header.frame_id = "world";
         dy_out.header.stamp = rostime;
         pub_dy.publish(dy_out);
 
-        // publish Color Points
+        int radius = map_scale_/m_res;
+        cv::Mat img = cv::Mat::zeros(cv::Size(2*radius+1, 2*radius+1), CV_8UC1);
         PointCloudColor cloud_map;
         for (OcTreeT::iterator it = m_octree->begin(m_maxTreeDepth),
             end = m_octree->end(); it != end; ++it)
@@ -83,12 +90,33 @@ private:
                 point.x = it.getX();
                 point.y = it.getY();
                 point.z = it.getZ();
-                double color = (it.getZ()-pose_z + 3)/6.0;
+                double color = (it.getZ()-pose_z+3)/6.0;
 
-		//point.r = 150 + color*100
-		//point.g = 150 + color*100
-		//point.b = 150 + color*100
+                point.r = 50 + 100*color;
+                point.g = 50 + 100*color;
+                point.b = 50 + 100*color;
 
+                cloud_map.push_back(point);
+
+                int p_x = -(point.y-pose_y)/m_res + img.cols/2;
+                int p_y = -(point.x-pose_x)/m_res + img.rows/2;
+           	
+		if ( p_x >= 0 && p_x < img.cols && p_y >=0 && p_y < img.rows){
+
+		  double height = (it.getZ()-pose_z+7)/8.0;
+		  int c_v = height*200 + 200;
+
+		  if (img.at<char>(p_x, p_y) < c_v)
+  		    img.at<char>(p_x, p_y) = c_v;
+
+		  if (img.at<char>(p_x, p_y)>=240)
+		    img.at<char>(p_x, p_y)=245;
+		  
+		  if (img.at<char>(p_x, p_y)<=10)
+		    img.at<char>(p_x, p_y)=10;
+		}
+		
+                /*
                 if (color > 0.66){
                     point.r = 0;
                     point.g = 250;
@@ -101,16 +129,22 @@ private:
                     point.r = 250;
                     point.g = 0;
                     point.b = 0;
-		    }
-                cloud_map.push_back(point);
+                }*/
             }
         }
+
+
+        // publish Color Points
         sensor_msgs::PointCloud2 map_out;
         pcl::toROSMsg (cloud_map, map_out);
         map_out.header.frame_id = "world";
         map_out.header.stamp = rostime;
         pub_map.publish(map_out);
 
+
+        // Publish image
+        sensor_msgs::ImagePtr im_msg = cv_bridge::CvImage(std_msgs::Header(), "mono8", img).toImageMsg();
+        pub_img.publish(im_msg);
     }
 
     int64_t timestamp_tolerance_ns_;
@@ -123,6 +157,10 @@ protected:
     ros::Subscriber subCloud;
     ros::Publisher  pub_dy;
     ros::Publisher  pub_map;
+
+    // Image transport
+    image_transport::ImageTransport imgNode_;
+    image_transport::Publisher pub_img;
 
     // PreOctree
     octomap::OcTree* cur_scan;

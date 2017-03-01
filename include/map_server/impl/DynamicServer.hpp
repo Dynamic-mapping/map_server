@@ -86,7 +86,7 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
     insertTimeScan(curLoc, loam);
     double total_elapsed = (ros::WallTime::now() - startTime).toSec();
     ROS_INFO("MapServer done (%zu pts, %f sec)", pc->size(), total_elapsed);
-    publishCloud(loam->header.stamp, curLoc(2,3));
+    publishCloud(loam->header.stamp, curLoc);
     return;
 }
 
