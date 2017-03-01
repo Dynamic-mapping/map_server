@@ -20,7 +20,7 @@ void DynamicServer::updateMap(const point3d &sensorOrigin)
     m_octree->clear();
     for (OcTree::leaf_iterator it = oldTree.begin(); it != oldTree.end(); it++) {
         if(oldTree.isNodeOccupied(*it)){
-          if (sqrt(pow(it.getX() - sensorOrigin.x(),2) + pow(it.getY() - sensorOrigin.y(),2)) >= MAP_RADIUS)
+          if (sqrt(pow(it.getX() - sensorOrigin.x(),2) + pow(it.getY() - sensorOrigin.y(),2)) >= map_scale_)
               continue;
           point3d old_point(it.getX(), it.getY(), it.getZ());
           m_octree->updateNode(old_point, true);
@@ -202,7 +202,7 @@ void DynamicServer::insertPC(const Eigen::Matrix4f &trans, const PointCloud &pc,
     // now mark all occupied cells:
     for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
         point3d point = tree->keyToCoord(*it);
-        if ((point - pOri).norm() > MAP_RADIUS) continue;
+        if ((point - pOri).norm() > map_scale_) continue;
         tree->updateNode(*it, true);
     }
 
@@ -268,10 +268,10 @@ void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::Loa
                 if(pNorm.normalize().z() > POINT_NORM) break;
 
                 // Check whether the pEnd within the map Area.
-                if(pNorm.norm() > (MAP_RADIUS - (pStart - pOri).norm())) {
+                if(pNorm.norm() > (map_scale_ - (pStart - pOri).norm())) {
 
                     if (j==26)
-                        pEnd = pStart + pNorm.normalize() * (MAP_RADIUS - (pStart - pOri).norm());
+                        pEnd = pStart + pNorm.normalize() * (map_scale_ - (pStart - pOri).norm());
                     else
                         continue;
                 }
@@ -289,7 +289,7 @@ void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::Loa
     for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
 
         point3d point = m_octree->keyToCoord(*it);
-        if ((point - pOri).norm() > MAP_RADIUS) continue;
+        if ((point - pOri).norm() > map_scale_) continue;
 
         m_octree->updateNode(*it, true);
 

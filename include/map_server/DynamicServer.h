@@ -17,6 +17,8 @@ public:
         nh_.param("sensor_model/miss", probMiss, 0.4);
         nh_.param("sensor_model/min", thresMin, 0.12);
         nh_.param("sensor_model/max", thresMax, 0.97);
+        nh_.param("map_scale", map_scale_, 50);
+
 
         cur_scan = new OcTreeT(m_res);
         cur_scan->setProbHit(probHit);
@@ -81,12 +83,17 @@ private:
                 point.x = it.getX();
                 point.y = it.getY();
                 point.z = it.getZ();
-                double color = (it.getZ()-pose_z+1)/6.0*255;
-                if (color > 0.9){
+                double color = (it.getZ()-pose_z + 3)/6.0;
+
+		//point.r = 150 + color*100
+		//point.g = 150 + color*100
+		//point.b = 150 + color*100
+
+                if (color > 0.66){
                     point.r = 0;
                     point.g = 250;
                     point.b = 0;
-                }else if(color > 0.66){
+                }else if(color > 0.40){
                     point.r = 0;
                     point.g = 0;
                     point.b = 250;
@@ -94,7 +101,7 @@ private:
                     point.r = 250;
                     point.g = 0;
                     point.b = 0;
-                }
+		    }
                 cloud_map.push_back(point);
             }
         }
@@ -131,6 +138,9 @@ protected:
     Transformation T_B_S_;
     Transformation T_B_D_;
     Transformation T_G_B_;
+
+    // map scale
+    int map_scale_;
 
     // Transform queue, used only when use_tf_transforms is false.
     std::deque<geometry_msgs::TransformStamped> transform_queue_;

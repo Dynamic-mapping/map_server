@@ -93,7 +93,6 @@ const float     LM_THRES        = 0.4;
 const float     CAR_HEIGHT      = 1.6;
 const float     POINT_NORM      = 0.1;
 
-const int       MAP_RADIUS      = 80;
 
 using std::sin;
 using std::cos;
