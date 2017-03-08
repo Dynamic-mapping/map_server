@@ -78,6 +78,7 @@ private:
 
         int radius = map_scale_/m_res;
         cv::Mat img = cv::Mat::zeros(cv::Size(2*radius+1, 2*radius+1), CV_8UC1);
+        cv::Mat e_map (2*radius+1, 2*radius+1, CV_32F, cv::Scalar::all(0));
         PointCloudColor cloud_map;
         for (OcTreeT::iterator it = m_octree->begin(m_maxTreeDepth),
             end = m_octree->end(); it != end; ++it)
@@ -90,46 +91,41 @@ private:
                 point.x = it.getX();
                 point.y = it.getY();
                 point.z = it.getZ();
-                double color = (it.getZ()-pose_z+3)/6.0;
+                double height = (it.getZ()-pose_z+3)/6.0;
 
-                point.r = 50 + 100*color;
-                point.g = 50 + 100*color;
-                point.b = 50 + 100*color;
+                point.r = 50 + 100*height;
+                point.g = 50 + 100*height;
+                point.b = 50 + 100*height;
 
                 cloud_map.push_back(point);
 
                 int p_x = -(point.y-pose_y)/m_res + img.cols/2;
                 int p_y = -(point.x-pose_x)/m_res + img.rows/2;
            	
-		if ( p_x >= 0 && p_x < img.cols && p_y >=0 && p_y < img.rows){
+                if ( p_x >= 0 && p_x < 2*radius+1 && p_y >=0 && p_y < 2*radius+1){
+                  e_map.at<float>(p_x, p_y) = (e_map.at<float>(p_x, p_y)+ height)/2;
+                }
+            }
+        }
 
-		  double height = (it.getZ()-pose_z+7)/8.0;
-		  int c_v = height*200 + 200;
+        for (size_t i = 0; i < 2*radius+1; i++)
+        {
+            for (size_t j = 0; j < 2*radius+1; j++){
+                //if (img.at<char>(p_x, p_y) < c_v)
+                //  img.at<char>(p_x, p_y) = c_v;
+                float height = e_map.at<float>(i, j)*300 + 50;
 
-		  if (img.at<char>(p_x, p_y) < c_v)
-  		    img.at<char>(p_x, p_y) = c_v;
+                if (height >= 240){
+                    img.at<char>(i, j)=245;
+                    continue;
+                }
 
-		  if (img.at<char>(p_x, p_y)>=240)
-		    img.at<char>(p_x, p_y)=245;
-		  
-		  if (img.at<char>(p_x, p_y)<=10)
-		    img.at<char>(p_x, p_y)=10;
-		}
-		
-                /*
-                if (color > 0.66){
-                    point.r = 0;
-                    point.g = 250;
-                    point.b = 0;
-                }else if(color > 0.40){
-                    point.r = 0;
-                    point.g = 0;
-                    point.b = 250;
-                }else {
-                    point.r = 250;
-                    point.g = 0;
-                    point.b = 0;
-                }*/
+                if (height <= 10) {
+                    img.at<char>(i, j)=10;
+                    continue;
+                }
+
+                img.at<char>(i, j) = height;
             }
         }
 
@@ -143,6 +139,7 @@ private:
 
 
         // Publish image
+        cv::resize(img,img,cv::Size(600,600));
         sensor_msgs::ImagePtr im_msg = cv_bridge::CvImage(std_msgs::Header(), "mono8", img).toImageMsg();
         pub_img.publish(im_msg);
     }

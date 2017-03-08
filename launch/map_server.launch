@@ -8,14 +8,14 @@
 -->
 <launch>
         <node pkg="map_server" type="dynamic_node" name="dynamic_map" output="screen">
-                <param name="resolution" value="0.5" />
+                <param name="resolution" value="0.4" />
 		
 		<!-- fixed map frame (set to 'map' if SLAM or localization running!) -->
                 <param name="frame_id" type="string" value="world" />
 		
 		<!-- maximum range to integrate (speedup!) -->
                 <param name="sensor_model/max_range" value="80.0" />
-                <param name="map_scale" value="50" />
+                <param name="map_scale" value="30" />
 		
 		<!-- data source to integrate (PointCloud2) -->
                 <!--remap from="cloud_in" to="/laserCloud" /-->
