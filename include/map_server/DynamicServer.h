@@ -11,7 +11,6 @@ public:
           imgNode_(nh),
           cur_scan(NULL),
           timestamp_tolerance_ns_(200000000)
-
     {
         double probHit, probMiss, thresMin, thresMax;
         nh_.param("sensor_model/hit", probHit, 0.7);
@@ -51,7 +50,7 @@ private:
     void checkDiff(void);
     void insertTimeScan(const Eigen::Matrix4f &trans, const doom::LoamScanPtr& loam);
 
-    void lookTF(const doom::LoamScanPtr& loam, Eigen::Matrix4f& sensorToWorld)
+    void lookTF(const doom::LoamScanPtr& loam, Eigen::Matrix4f& sensorToWorld, double &yaw)
     {
         tf::StampedTransform sensorToWorldTf;
         try {
@@ -60,21 +59,48 @@ private:
           return;
         }
         pcl_ros::transformAsMatrix(sensorToWorldTf, sensorToWorld);
-
+        tf::Quaternion q = sensorToWorldTf.getRotation();
+        double r, p, y;
+        tf::Matrix3x3(q).getRPY(r, p, y);
+        yaw = y;
         return;
     }
 
-    void publishCloud(const ros::Time& rostime, Eigen::Matrix4f pose)
+    void publishCloud(const ros::Time& rostime, Eigen::Matrix4f pose, double yaw)
     {
         double pose_x = pose(0,3);
         double pose_y = pose(1,3);
         double pose_z = pose(2,3);
+
+        Eigen::Matrix3f quan;
+        quan(0,0) = pose(0,0);
+        quan(0,1) = pose(0,1);
+        quan(0,2) = pose(0,2);
+        quan(1,0) = pose(1,0);
+        quan(1,1) = pose(1,1);
+        quan(1,2) = pose(1,2);
+        quan(2,0) = pose(2,0);
+        quan(2,1) = pose(2,1);
+        quan(2,2) = pose(2,2);
+
+//        Eigen::Quaternionf q(quan);
+//        Eigen::Vector3f euler = q.toRotationMatrix().eulerAngles(2, 1, 0);
+//        float yaw = -euler[0];
+        yaw = -yaw;
+        std::cout << yaw << std::endl;
 
         sensor_msgs::PointCloud2 dy_out;
         pcl::toROSMsg (dy_pc, dy_out);
         dy_out.header.frame_id = "world";
         dy_out.header.stamp = rostime;
         pub_dy.publish(dy_out);
+
+        // Add random rotation and translation
+        float Tt = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
+        float Tr = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
+
+        float T_e = 0.0 * Tt;
+        float R_e = 0.0 * (Tr-0.5);
 
         int radius = map_scale_/m_res;
         cv::Mat img = cv::Mat::zeros(cv::Size(2*radius+1, 2*radius+1), CV_8UC1);
@@ -88,8 +114,8 @@ private:
                     it.getZ() < (pose_z + 3)){
 
                 PointColor point;
-                point.x = it.getX();
-                point.y = it.getY();
+                point.x = it.getX() + Tr * T_e;
+                point.y = it.getY() + Tr * T_e;
                 point.z = it.getZ();
                 double height = (it.getZ()-pose_z+3)/6.0;
 
@@ -99,9 +125,14 @@ private:
 
                 cloud_map.push_back(point);
 
-                int p_x = -(point.y-pose_y)/m_res + img.cols/2;
-                int p_y = -(point.x-pose_x)/m_res + img.rows/2;
-           	
+                int p_x = -((point.y-pose_y)/m_res*cos(R_e)+(point.x-pose_x)/m_res*sin(R_e))
+                        + img.cols/2;
+                int p_y = -((point.x-pose_x)/m_res*cos(R_e)-(point.y-pose_y)/m_res*sin(R_e))
+                        + img.rows/2;
+
+                //int p_x = -(point.y-pose_y)/m_res + img.cols/2;
+                //int p_y = -(point.x-pose_x)/m_res + img.rows/2;
+
                 if ( p_x >= 0 && p_x < 2*radius+1 && p_y >=0 && p_y < 2*radius+1){
                   e_map.at<float>(p_x, p_y) = (e_map.at<float>(p_x, p_y)+ height)/2;
                 }

@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8)
 project(map_server)
 
+add_compile_options(-std=c++11)
+
 set(PACKAGE_DEPENDENCIES
   roscpp
   visualization_msgs

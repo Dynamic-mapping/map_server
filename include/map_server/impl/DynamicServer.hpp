@@ -50,8 +50,9 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
                     << pc_nonground.size());
 #endif
     /// Step4 Extract the transformation from tf
+    double yaw = 0;
     Eigen::Matrix4f curLoc;
-    lookTF(loam, curLoc);
+    lookTF(loam, curLoc, yaw);
     pcl::transformPointCloud(*pc, *pc, curLoc);
     pcl::transformPointCloud(pc_ground, pc_ground, curLoc);
     pcl::transformPointCloud(pc_nonground, pc_nonground, curLoc);
@@ -86,7 +87,7 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
     insertTimeScan(curLoc, loam);
     double total_elapsed = (ros::WallTime::now() - startTime).toSec();
     ROS_INFO("MapServer done (%zu pts, %f sec)", pc->size(), total_elapsed);
-    publishCloud(loam->header.stamp, curLoc);
+    publishCloud(loam->header.stamp, curLoc, yaw);
     return;
 }
 

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <functional>
+#include <random>
 
 // GOOGLE LIB
 #include <glog/logging.h>
