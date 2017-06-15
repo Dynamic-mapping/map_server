@@ -7,17 +7,18 @@
   www.ros.org/wiki/octomap_server for details  
 -->
 <launch>
-        <node pkg="map_server" type="map_server_node" name="octomap_server">
-                <param name="resolution" value="0.8" />
+        <node pkg="map_server" type="dynamic_node" name="dynamic_map" output="screen">
+                <param name="resolution" value="0.4" />
 		
 		<!-- fixed map frame (set to 'map' if SLAM or localization running!) -->
                 <param name="frame_id" type="string" value="world" />
 		
 		<!-- maximum range to integrate (speedup!) -->
-                <param name="sensor_model/max_range" value="50.0" />
+                <param name="sensor_model/max_range" value="80.0" />
+                <param name="map_scale" value="30" />
 		
 		<!-- data source to integrate (PointCloud2) -->
-                <remap from="cloud_in" to="/laserCloud" />
+                <!--remap from="cloud_in" to="/laserCloud" /-->
 	
 	</node>
 </launch>

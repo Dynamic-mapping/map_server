@@ -14,18 +14,21 @@ set(PACKAGE_DEPENDENCIES
   octomap_msgs
   dynamic_reconfigure
   nodelet  
+  cv_bridge
+  image_transport
 )
 
-
+find_package(OpenCV REQUIRED)
 find_package(catkin REQUIRED COMPONENTS ${PACKAGE_DEPENDENCIES})
 
-find_package(PCL REQUIRED QUIET COMPONENTS common sample_consensus io segmentation filters)
+find_package(PCL 1.8.0 EXACT REQUIRED QUIET COMPONENTS common sample_consensus io segmentation filters)
 
 find_package(octomap REQUIRED)
 add_definitions(-DOCTOMAP_NODEBUGOUT)
 
 include_directories(
   include
+  ${OpenCV_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
   ${OCTOMAP_INCLUDE_DIRS}
@@ -41,14 +44,15 @@ catkin_package(
 )
 
 set(LINK_LIBS
+  ${OpenCV_LIBRARIES}
   ${OCTOMAP_LIBRARIES}
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
 )
 
-add_library(${PROJECT_NAME} src/OctomapServer.cpp src/OctomapServerMultilayer.cpp src/TrackingOctomapServer.cpp)
-target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})
-add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}_gencfg)
+FILE(GLOB_RECURSE SRC_LIST    "src/*.cpp")
+FILE(GLOB_RECURSE HEADER_LIST "include/map_server/*.h" "include/map_server/impl/*.hpp" "include/common.h")
 
-add_executable(map_server_node src/map_server_node.cpp)
-target_link_libraries(map_server_node ${PROJECT_NAME} ${LINK_LIBS})
+link_directories(${PCL_LIBRARY_DIRS} ${OCTOMAP_LIBRARY_DIRS} ${OpenCV_LIBRARY_DIRS})
+add_executable(dynamic_node src/dynamic_node.cpp ${HEADER_LIST})
+target_link_libraries(dynamic_node ${LINK_LIBS})
