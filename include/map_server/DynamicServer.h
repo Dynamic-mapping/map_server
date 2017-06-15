@@ -58,6 +58,15 @@ private:
         } catch(tf::TransformException& ex){
           return;
         }
+
+        // publish world to local fixed
+        tf::Transform transform;
+        transform.setOrigin(sensorToWorldTf.getOrigin());
+        tf::Quaternion tf_q;
+        tf_q.setRPY(0,0,0);
+        transform.setRotation(tf_q);
+        tf_broader_.sendTransform(tf::StampedTransform(transform, loam->header.stamp, "world", "base_fix"));
+
         pcl_ros::transformAsMatrix(sensorToWorldTf, sensorToWorld);
         tf::Quaternion q = sensorToWorldTf.getRotation();
         double r, p, y;
@@ -72,28 +81,27 @@ private:
         double pose_y = pose(1,3);
         double pose_z = pose(2,3);
 
-        Eigen::Matrix3f quan;
-        quan(0,0) = pose(0,0);
-        quan(0,1) = pose(0,1);
-        quan(0,2) = pose(0,2);
-        quan(1,0) = pose(1,0);
-        quan(1,1) = pose(1,1);
-        quan(1,2) = pose(1,2);
-        quan(2,0) = pose(2,0);
-        quan(2,1) = pose(2,1);
-        quan(2,2) = pose(2,2);
-
+//        Eigen::Matrix3f quan;
+//        quan(0,0) = pose(0,0);
+//        quan(0,1) = pose(0,1);
+//        quan(0,2) = pose(0,2);
+//        quan(1,0) = pose(1,0);
+//        quan(1,1) = pose(1,1);
+//        quan(1,2) = pose(1,2);
+//        quan(2,0) = pose(2,0);
+//        quan(2,1) = pose(2,1);
+//        quan(2,2) = pose(2,2);
 //        Eigen::Quaternionf q(quan);
 //        Eigen::Vector3f euler = q.toRotationMatrix().eulerAngles(2, 1, 0);
 //        float yaw = -euler[0];
-        yaw = -yaw;
-        std::cout << yaw << std::endl;
+//        yaw = -yaw;
+//        std::cout << yaw << std::endl;
 
-        sensor_msgs::PointCloud2 dy_out;
-        pcl::toROSMsg (dy_pc, dy_out);
-        dy_out.header.frame_id = "world";
-        dy_out.header.stamp = rostime;
-        pub_dy.publish(dy_out);
+//        sensor_msgs::PointCloud2 dy_out;
+//        pcl::toROSMsg (dy_pc, dy_out);
+//        dy_out.header.frame_id = "world";
+//        dy_out.header.stamp = rostime;
+//        pub_dy.publish(dy_out);
 
         // Add random rotation and translation
         float Tt = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
@@ -113,10 +121,13 @@ private:
                    it.getZ() > (pose_z - 3) &&
                     it.getZ() < (pose_z + 3)){
 
-                PointColor point;
-                point.x = it.getX() + Tr * T_e;
-                point.y = it.getY() + Tr * T_e;
-                point.z = it.getZ();
+                PointColor pointImg, point;
+                point.x = it.getX() + Tr * T_e - pose_x;
+                point.y = it.getY() + Tr * T_e - pose_y;
+                point.z = it.getZ() - pose_z;
+                pointImg.x = it.getX() + Tr * T_e;
+                pointImg.y = it.getY() + Tr * T_e;
+                pointImg.z = it.getZ();
                 double height = (it.getZ()-pose_z+3)/6.0;
 
                 point.r = 50 + 100*height;
@@ -125,9 +136,9 @@ private:
 
                 cloud_map.push_back(point);
 
-                int p_x = -((point.y-pose_y)/m_res*cos(R_e)+(point.x-pose_x)/m_res*sin(R_e))
+                int p_x = -((pointImg.y-pose_y)/m_res*cos(R_e)+(pointImg.x-pose_x)/m_res*sin(R_e))
                         + img.cols/2;
-                int p_y = -((point.x-pose_x)/m_res*cos(R_e)-(point.y-pose_y)/m_res*sin(R_e))
+                int p_y = -((pointImg.x-pose_x)/m_res*cos(R_e)-(pointImg.y-pose_y)/m_res*sin(R_e))
                         + img.rows/2;
 
                 //int p_x = -(point.y-pose_y)/m_res + img.cols/2;
@@ -164,7 +175,7 @@ private:
         // publish Color Points
         sensor_msgs::PointCloud2 map_out;
         pcl::toROSMsg (cloud_map, map_out);
-        map_out.header.frame_id = "world";
+        map_out.header.frame_id = "base_fix";
         map_out.header.stamp = rostime;
         pub_map.publish(map_out);
 

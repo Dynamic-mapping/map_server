@@ -70,8 +70,8 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
     /// Step6 Check the difference between new single-bin scan and octree map
     cur_scan->clear();
     dy_pc.clear();
-    insertPC(curLoc, pc_nonground, cur_scan);
-    checkDiff();
+//    insertPC(curLoc, pc_nonground, cur_scan);
+//    checkDiff();
 
     /// Step7 dynamic points cluster
 
