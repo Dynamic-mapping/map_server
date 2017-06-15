@@ -80,9 +80,11 @@
 #include <pcl-1.8/pcl/kdtree/kdtree_flann.h>
 #include <pcl-1.8/pcl/point_cloud.h>
 #include <pcl-1.8/pcl/point_types.h>
-#include <pcl-1.8/pcl/registration/icp.h>
+//#include <pcl-1.8/pcl/registration/icp.h>
 #include <pcl-1.8/pcl/io/ply_io.h>
 
+
+#include <pcl/registration/gicp.h>
 #include <pcl/search/kdtree.h>
 #include <pcl/kdtree/kdtree.h>
 #include <pcl/search/impl/kdtree.hpp>
@@ -317,7 +319,7 @@ void groundFilter(const PointCloudPtr &cloud, PointCloud &ground, PointCloud &no
     seg.setModelType (pcl::SACMODEL_PLANE);
     seg.setMethodType (pcl::SAC_RANSAC);
     seg.setMaxIterations (100);
-    seg.setDistanceThreshold (0.2);
+    seg.setDistanceThreshold (0.4);
 
     // Segment the largest planar component from the remaining cloud
     seg.setInputCloud(cloud);

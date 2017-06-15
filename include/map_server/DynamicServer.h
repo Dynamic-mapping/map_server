@@ -17,7 +17,7 @@ public:
         nh_.param("sensor_model/miss", probMiss, 0.4);
         nh_.param("sensor_model/min", thresMin, 0.12);
         nh_.param("sensor_model/max", thresMax, 0.97);
-        nh_.param("map_scale", map_scale_, 50);
+        nh_.param("map_scale", map_scale_, 30);
 
 
         cur_scan = new OcTreeT(m_res);
@@ -28,6 +28,8 @@ public:
 
         pub_dy   = nh_.advertise<sensor_msgs::PointCloud2>("dy_obj", 1);
         pub_map  = nh_.advertise<sensor_msgs::PointCloud2>("map", 1);
+        pub_ground     = nh_.advertise<sensor_msgs::PointCloud2>("ground", 1);
+        pub_nonground  = nh_.advertise<sensor_msgs::PointCloud2>("nonground", 1);
         pub_img  = imgNode_.advertise("map_img", 1);
         subCloud = nh_.subscribe(
                     "/dynamicMapping", 1, &DynamicServer::loamCallback, this);
@@ -49,6 +51,12 @@ private:
     void insertPC(const Eigen::Matrix4f &trans, const PointCloud &pc, OcTreeT *tree);
     void checkDiff(void);
     void insertTimeScan(const Eigen::Matrix4f &trans, const doom::LoamScanPtr& loam);
+    void ApproxNearestNeighbors(const PointCloudPtr& points, PointCloud& neighbors);
+    void MeasurementUpdate(const PointCloudPtr& points,
+                           const PointCloudPtr& neighbors,
+                                 PointCloud &aligned);
+    void PointCloudCut(const PointCloudPtr& points,
+                                      PointCloud& outputs);
 
     void lookTF(const doom::LoamScanPtr& loam, Eigen::Matrix4f& sensorToWorld, double &yaw)
     {
@@ -185,6 +193,8 @@ protected:
     ros::Subscriber subCloud;
     ros::Publisher  pub_dy;
     ros::Publisher  pub_map;
+    ros::Publisher  pub_ground;
+    ros::Publisher  pub_nonground;
 
     // Image transport
     image_transport::ImageTransport imgNode_;
