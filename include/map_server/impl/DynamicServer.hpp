@@ -26,6 +26,18 @@ void DynamicServer::updateMap(const point3d &sensorOrigin)
           m_octree->updateNode(old_point, true);
         }
     }
+
+    /// Check the Old Octree
+    OcTreeT oldObjTree = *obj_scan;
+    obj_scan->clear();
+    for (OcTree::leaf_iterator it = oldObjTree.begin(); it != oldObjTree.end(); it++) {
+        if(oldObjTree.isNodeOccupied(*it)){
+          if (sqrt(pow(it.getX() - sensorOrigin.x(),2) + pow(it.getY() - sensorOrigin.y(),2)) >= map_scale_)
+              continue;
+          point3d old_point(it.getX(), it.getY(), it.getZ());
+          obj_scan->updateNode(old_point, true);
+        }
+    }
 }
 
 void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
@@ -69,7 +81,7 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
     if (pc_neighbors->size() >= 100)
     {
 #ifdef DEBUG
-        ROS_INFO_STREAM("all "<< pc->size() << ", neighbors"
+        ROS_INFO_STREAM("all "<< pc->size() << ", neighbors "
                     << pc_neighbors->size());
 #endif
 
@@ -105,10 +117,10 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
     }
 
     /// Step6 Check the difference between new single-bin scan and octree map
-    cur_scan->clear();
-    dy_pc.clear();
-    insertPC(curLoc, pc_nonground, cur_scan);
-    checkDiff();
+//    cur_scan->clear();
+//    dy_pc.clear();
+//    insertPC(curLoc, pc_nonground, cur_scan);
+//    checkDiff();
 
     /// Step7 dynamic points cluster
 
@@ -119,14 +131,100 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
     /// Step9 dynamic object estimation
 
     /// Step 10 Update local octree map
-//    insertPC(curLoc, pc_ground, m_octree);
-    insertPC(curLoc, *npc, m_octree);
+    plane_octree->clear();
+    nonplane_octree->clear();
+    insertNonGround(curLoc, pc_nonground);
+    insertGround(curLoc, pc_ground);
+//    insertPC(curLoc, *npc, m_octree);
 //    insertTimeScan(curLoc, loam);
     double total_elapsed = (ros::WallTime::now() - startTime).toSec();
     ROS_INFO("MapServer done (%zu pts, %f sec)", pc->size(), total_elapsed);
     publishCloud(loam->header.stamp, curLoc, yaw);
     return;
 }
+
+void DynamicServer::insertNonGround(const Eigen::Matrix4f &trans, const PointCloud &pc)
+{
+    //! Step1 Extract out each occupied cells
+    KeySet occupied_cells;
+    point3d pOri(trans(0,3), trans(1, 3), trans(2, 3));
+
+    // free on ray, occupied on endpoint:
+    for (PCLPointCloud::const_iterator it = pc.begin(); it != pc.end(); ++it){
+      point3d point(it->x, it->y, it->z);
+
+      if (((point - pOri).norm() <= 4) || ((point - pOri).norm() >= 100))
+          continue;
+
+      OcTreeKey key;
+      if (obj_scan->coordToKeyChecked(point, key))
+        occupied_cells.insert(key);
+    }
+
+    // now mark all occupied cells:
+    for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
+        point3d point = obj_scan->keyToCoord(*it);
+        if ((point - pOri).norm() > map_scale_) continue;
+        obj_scan->updateNode(*it, true);
+    }
+
+    // Extract the Lowerest point in object scan octree
+    float sum_z = 0.0;
+    int num_z = 1.0;
+    for(OcTree::iterator it = obj_scan->begin(); it != obj_scan->end(); ++it){
+        if (obj_scan->isNodeOccupied(*it)){
+            point3d pt = it.getCoordinate();
+            sum_z += pt.z();
+            num_z += 1;
+        }
+    }
+    float sub_z = sum_z/num_z;
+    ROS_INFO_STREAM ("min z is " << sub_z);
+
+    // Lower all the nonground
+    for(OcTree::iterator it = obj_scan->begin(); it != obj_scan->end(); ++it){
+        point3d pt = it.getCoordinate();
+        pt.z() -= sub_z-1.5;
+        if (pt.z() > 0) nonplane_octree->updateNode(pt, true);
+    }
+}
+
+void DynamicServer::insertGround(const Eigen::Matrix4f &trans, const PointCloud &pc)
+{
+    //! Step1 Extract out each occupied cells
+    KeySet occupied_cells;
+    point3d pOri(trans(0,3), trans(1, 3), trans(2, 3));
+
+    // free on ray, occupied on endpoint:
+    for (PCLPointCloud::const_iterator it = pc.begin(); it != pc.end(); ++it){
+      point3d point(it->x, it->y, it->z);
+
+      if (((point - pOri).norm() <= 4) || ((point - pOri).norm() >= 100))
+          continue;
+
+      OcTreeKey key;
+      if (m_octree->coordToKeyChecked(point, key))
+        occupied_cells.insert(key);
+    }
+
+    // now mark all occupied cells:
+    for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
+        point3d point = m_octree->keyToCoord(*it);
+        if ((point - pOri).norm() > map_scale_) continue;
+        m_octree->updateNode(*it, true);
+    }
+
+    // Extract plane octree map
+    for(OcTree::iterator it = m_octree->begin(); it != m_octree->end(); ++it){
+        if (plane_octree->isNodeOccupied(*it)){
+            point3d pt = it.getCoordinate();
+            pt.z() = 0;
+            plane_octree->updateNode(pt, true);
+        }
+    }
+}
+
+
 
 void DynamicServer::PointCloudCut(const PointCloudPtr& points,
                                   PointCloud& outputs)
@@ -136,7 +234,8 @@ void DynamicServer::PointCloudCut(const PointCloudPtr& points,
     for (PCLPointCloud::const_iterator it = points->begin(); it != points->end(); ++it){
 
         double distance = sqrt(pow(it->x, 2) + pow(it->y, 2));
-        if (distance > (map_scale_+10) || fabs(it->z > 8))
+        if (distance > (map_scale_+10) ||
+                distance < 5 || fabs(it->z > 8))
             continue;
 
         PointT pc_point(it->x, it->y, it->z);
@@ -149,7 +248,7 @@ void DynamicServer::MeasurementUpdate(const PointCloudPtr& points,
                                       PointCloud& aligned)
 {
     // G-ICP based alignment.
-    pcl::GeneralizedIterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+    pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
     icp.setRANSACIterations(0);
     icp.setMaximumIterations(10);
 
@@ -171,7 +270,7 @@ void DynamicServer::ApproxNearestNeighbors(const PointCloudPtr & points, PointCl
 
         // Search the point in the octree
         OcTreeNode* node = m_octree->search(pt);
-        if (node && cur_scan->isNodeOccupied(node)){
+        if (node){
             PointT pc_point(pt.x(), pt.y(), pt.z());
             neighbors.push_back(pc_point);
         }
@@ -272,6 +371,8 @@ void DynamicServer::insertTimeScan(const Eigen::Matrix4f &trans, const doom::Loa
     }
 }
 
+
+
 void DynamicServer::insertPC(const Eigen::Matrix4f &trans, const PointCloud &pc, OcTreeT *tree)
 {
     //! Step1 Extract out each occupied cells
@@ -313,19 +414,19 @@ void DynamicServer::insertPC(const Eigen::Matrix4f &trans, const PointCloud &pc,
       }
     }
 
-    // mark free cells with the pre_octree
-    for(OcTree::iterator it = cur_scan->begin(); it != cur_scan->end(); ++it){
-        if (!cur_scan->isNodeOccupied(*it)){
-            point3d pt = it.getCoordinate();
-            OcTreeNode* node = tree->search(pt);
-            if (node && tree->isNodeOccupied(node)){
-                OcTreeKey key;
-                if (tree->coordToKeyChecked(pt, key)){
-                  free_cells.insert(key);
-                }
-            }
-        }
-    }
+//    // mark free cells with the pre_octree
+//    for(OcTree::iterator it = cur_scan->begin(); it != cur_scan->end(); ++it){
+//        if (!cur_scan->isNodeOccupied(*it)){
+//            point3d pt = it.getCoordinate();
+//            OcTreeNode* node = tree->search(pt);
+//            if (node && tree->isNodeOccupied(node)){
+//                OcTreeKey key;
+//                if (tree->coordToKeyChecked(pt, key)){
+//                  free_cells.insert(key);
+//                }
+//            }
+//        }
+//    }
 
     // mark free cells only if not seen occupied in this cloud
     for(KeySet::iterator it = free_cells.begin(), end=free_cells.end(); it!= end; ++it){
@@ -354,18 +455,18 @@ void DynamicServer::checkDiff(void)
     /// 1      1    Potential Statics
     // mark free cells with the pre_octree
     PointCloudPtr dy_points (new PointCloud);
-    for(OcTree::iterator it = m_octree->begin(); it != m_octree->end(); ++it){
+//    for(OcTree::iterator it = m_octree->begin(); it != m_octree->end(); ++it){
 
-        if (!m_octree->isNodeOccupied(*it)){
+//        if (!m_octree->isNodeOccupied(*it)){
 
-            point3d pt = it.getCoordinate();
-            OcTreeNode* node = cur_scan->search(pt);
-            if (node && cur_scan->isNodeOccupied(node)){
-                PointT pc_point(pt.x(), pt.y(), pt.z());
-                dy_points->push_back(pc_point);
-            }
-        }
-    }
+//            point3d pt = it.getCoordinate();
+//            OcTreeNode* node = cur_scan->search(pt);
+//            if (node && cur_scan->isNodeOccupied(node)){
+//                PointT pc_point(pt.x(), pt.y(), pt.z());
+//                dy_points->push_back(pc_point);
+//            }
+//        }
+//    }
 
     ROS_INFO_STREAM("Dynamic points " << dy_points->size());
     if (dy_points->size() < 10)

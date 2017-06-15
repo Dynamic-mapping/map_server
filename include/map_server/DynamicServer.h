@@ -9,7 +9,9 @@ public:
     DynamicServer(ros::NodeHandle nh)
         : nh_(nh),
           imgNode_(nh),
-          cur_scan(NULL),
+          obj_scan(NULL),
+          plane_octree(NULL),
+          nonplane_octree(NULL),
           timestamp_tolerance_ns_(200000000)
     {
         double probHit, probMiss, thresMin, thresMax;
@@ -20,11 +22,27 @@ public:
         nh_.param("map_scale", map_scale_, 30);
 
 
-        cur_scan = new OcTreeT(m_res);
-        cur_scan->setProbHit(probHit);
-        cur_scan->setProbMiss(probMiss);
-        cur_scan->setClampingThresMin(thresMin);
-        cur_scan->setClampingThresMax(thresMax);
+        obj_scan = new OcTreeT(m_res);
+        obj_scan->setProbHit(probHit);
+        obj_scan->setProbMiss(probMiss);
+        obj_scan->setClampingThresMin(thresMin);
+        obj_scan->setClampingThresMax(thresMax);
+
+        plane_octree = new OcTreeT(m_res);
+        plane_octree->setProbHit(probHit);
+        plane_octree->setProbMiss(probMiss);
+        plane_octree->setClampingThresMin(thresMin);
+        plane_octree->setClampingThresMax(thresMax);
+
+        nonplane_octree = new OcTreeT(m_res);
+        nonplane_octree->setProbHit(probHit);
+        nonplane_octree->setProbMiss(probMiss);
+        nonplane_octree->setClampingThresMin(thresMin);
+        nonplane_octree->setClampingThresMax(thresMax);
+
+
+        pub_octree_plane = nh_.advertise<sensor_msgs::PointCloud2>("octree_plane", 1);
+        pub_octree_nonplane = nh_.advertise<sensor_msgs::PointCloud2>("octree_nonplane", 1);
 
         pub_dy   = nh_.advertise<sensor_msgs::PointCloud2>("dy_obj", 1);
         pub_map  = nh_.advertise<sensor_msgs::PointCloud2>("map", 1);
@@ -49,6 +67,8 @@ private:
 
     void updateMap(const point3d &sensorOrigin);
     void insertPC(const Eigen::Matrix4f &trans, const PointCloud &pc, OcTreeT *tree);
+    void insertGround(const Eigen::Matrix4f &trans, const PointCloud &pc);
+    void insertNonGround(const Eigen::Matrix4f &trans, const PointCloud &pc);
     void checkDiff(void);
     void insertTimeScan(const Eigen::Matrix4f &trans, const doom::LoamScanPtr& loam);
     void ApproxNearestNeighbors(const PointCloudPtr& points, PointCloud& neighbors);
@@ -147,6 +167,58 @@ private:
             }
         }
 
+        // Cloud plane
+        PointCloud cloud_plane;
+        cloud_plane.clear();
+        for (OcTreeT::iterator it = plane_octree->begin(m_maxTreeDepth),
+            end = plane_octree->end(); it != end; ++it)
+        {
+            if (plane_octree->isNodeOccupied(*it)) {
+
+                PointT point;
+                point.x = it.getX();
+                point.y = it.getY();
+                point.z = it.getZ();
+
+                cloud_plane.push_back(point);
+            }
+        }
+
+        // publish Color Points
+        sensor_msgs::PointCloud2 msg_plane;
+        pcl::toROSMsg (cloud_plane, msg_plane);
+        msg_plane.header.frame_id = "world";
+        msg_plane.header.stamp = rostime;
+        pub_octree_plane.publish(msg_plane);
+
+
+        // Cloud nonPlane
+        PointCloud cloud_nonplane;
+        cloud_nonplane.clear();
+        for (OcTreeT::iterator it = nonplane_octree->begin(m_maxTreeDepth),
+            end = nonplane_octree->end(); it != end; ++it)
+        {
+            if (nonplane_octree->isNodeOccupied(*it)) {
+
+                PointT point;
+                point.x = it.getX();
+                point.y = it.getY();
+                point.z = it.getZ();
+
+                cloud_nonplane.push_back(point);
+            }
+        }
+
+        // publish Color Points
+        sensor_msgs::PointCloud2 msg_nonplane;
+        pcl::toROSMsg (cloud_nonplane, msg_nonplane);
+        msg_nonplane.header.frame_id = "world";
+        msg_nonplane.header.stamp = rostime;
+        pub_octree_nonplane.publish(msg_nonplane);
+
+
+
+        // publish image
         for (size_t i = 0; i < 2*radius+1; i++)
         {
             for (size_t j = 0; j < 2*radius+1; j++){
@@ -196,12 +268,18 @@ protected:
     ros::Publisher  pub_ground;
     ros::Publisher  pub_nonground;
 
+    ros::Publisher  pub_octree_plane;
+    ros::Publisher  pub_octree_nonplane;
+
     // Image transport
     image_transport::ImageTransport imgNode_;
     image_transport::Publisher pub_img;
 
     // PreOctree
-    octomap::OcTree* cur_scan;
+    octomap::OcTree* obj_scan;
+
+    octomap::OcTree* plane_octree;
+    octomap::OcTree* nonplane_octree;
 
     // Pointcloud
     PointCloud  dy_pc;
