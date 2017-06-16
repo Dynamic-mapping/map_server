@@ -10,6 +10,7 @@ public:
         : nh_(nh),
           imgNode_(nh),
           cur_scan(NULL),
+          dataID_(0),
           timestamp_tolerance_ns_(200000000)
     {
         double probHit, probMiss, thresMin, thresMax;
@@ -178,12 +179,34 @@ private:
         map_out.header.frame_id = "base_fix";
         map_out.header.stamp = rostime;
         pub_map.publish(map_out);
-
-
         // Publish image
         cv::resize(img,img,cv::Size(600,600));
         sensor_msgs::ImagePtr im_msg = cv_bridge::CvImage(std_msgs::Header(), "mono8", img).toImageMsg();
         pub_img.publish(im_msg);
+
+
+        if (cloud_map.size() <= 100)
+            return;
+        // Save PCD and Image files and its pose information
+        std::ostringstream pcd_path;
+        pcd_path << "/home/i/new_loam/pcd/" << std::setfill('0') << std::setw(5) <<dataID_<<".pcd";
+        pcl::io::savePCDFileASCII(pcd_path.str(), cloud_map);
+        ROS_INFO_STREAM("Save pcd done " << pcd_path.str());
+
+        std::ostringstream img_path;
+        img_path << "/home/i/new_loam/img/" << std::setfill('0') << std::setw(5) <<dataID_<<".jpg";
+        cv::imwrite(img_path.str(), img);
+        ROS_INFO_STREAM("Save img " << img_path.str());
+        dataID_ += 1;
+
+        std::ostringstream pose_path;
+        pose_path << "/home/i/new_loam/pose.txt";
+        std::ofstream file(pose_path.str(), std::ios::app);
+        std::ostringstream pose_info;
+        pose_info << std::setfill('0') << std::setw(5) <<dataID_ << " "
+                  << pose_x << " " << pose_y << " " << pose_z << std::endl;
+        file << pose_info.str();
+        file.close();
     }
 
     int64_t timestamp_tolerance_ns_;
@@ -218,6 +241,10 @@ protected:
 
     // map scale
     int map_scale_;
+
+    // data index
+    int dataID_;
+
 
     // Transform queue, used only when use_tf_transforms is false.
     std::deque<geometry_msgs::TransformStamped> transform_queue_;
