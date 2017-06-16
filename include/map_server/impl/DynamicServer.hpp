@@ -84,7 +84,7 @@ void DynamicServer::loamCallback(const doom::LoamScanPtr& loam)
 
     /// Step-1 Update local octree map
     insertPC(curLoc, *pc, m_octree);
-    insertTimeScan(curLoc, loam);
+//    insertTimeScan(curLoc, loam);
     double total_elapsed = (ros::WallTime::now() - startTime).toSec();
     ROS_INFO("MapServer done (%zu pts, %f sec)", pc->size(), total_elapsed);
     publishCloud(loam->header.stamp, curLoc, yaw);
