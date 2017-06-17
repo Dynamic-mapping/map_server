@@ -76,9 +76,9 @@
 #include <pcl_ros/transforms.h>
 #include <pcl-1.8/pcl/common/transforms.h>
 #include <pcl-1.8/pcl/conversions.h>
-#include <pcl-1.8/pcl/filters/voxel_grid.h>
-#include <pcl-1.8/pcl/filters/filter.h>
-#include <pcl-1.8/pcl/filters/extract_indices.h>
+//#include <pcl-1.8/pcl/filters/voxel_grid.h>
+//#include <pcl-1.8/pcl/filters/filter.h>
+//#include <pcl-1.8/pcl/filters/extract_indices.h>
 #include <pcl-1.8/pcl/kdtree/kdtree_flann.h>
 #include <pcl-1.8/pcl/point_cloud.h>
 #include <pcl-1.8/pcl/point_types.h>
@@ -87,6 +87,9 @@
 
 #include <pcl/search/kdtree.h>
 #include <pcl/kdtree/kdtree.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/filter.h>
+#include <pcl/filters/extract_indices.h>
 #include <pcl/search/impl/kdtree.hpp>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/segmentation/impl/extract_clusters.hpp>
