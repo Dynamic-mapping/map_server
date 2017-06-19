@@ -8,7 +8,7 @@
 -->
 <launch>
         <node pkg="map_server" type="dynamic_node" name="dynamic_map" output="screen">
-                <param name="resolution" value="0.6" />
+                <param name="resolution" value="0.4" />
 		
 		<!-- fixed map frame (set to 'map' if SLAM or localization running!) -->
                 <param name="frame_id" type="string" value="world" />
