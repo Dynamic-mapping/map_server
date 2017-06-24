@@ -86,13 +86,14 @@ private:
         float Tt = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
         float Tr = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
 
-        float T_e = 10.0 * Tt;
-        float R_e = 1.5 * (Tr-0.5);
+        float T_e = 1.0 * Tt;
+        float R_e = 0.1 * (Tr-0.5);
 
         int radius = map_scale_/m_res;
         cv::Mat img = cv::Mat::zeros(cv::Size(2*radius+1, 2*radius+1), CV_8UC1);
         cv::Mat e_map (2*radius+1, 2*radius+1, CV_32F, cv::Scalar::all(0));
         PointCloud cloud_map;
+//        pcl::PointCloud<pcl::PointXYZI> cloud_map;
         for (OcTreeT::iterator it = m_octree->begin(m_maxTreeDepth),
             end = m_octree->end(); it != end; ++it)
         {
@@ -100,7 +101,7 @@ private:
                    it.getZ() > (pose_z - 10) &&
                     it.getZ() < (pose_z + 10)){
 
-                PointT pointImg, point;
+                pcl::PointXYZ pointImg, point;
                 point.x = it.getX() - pose_x;
                 point.y = it.getY() - pose_y;
                 point.z = it.getZ() - pose_z;
@@ -108,6 +109,15 @@ private:
                 pointImg.y = it.getY() + Tr * T_e;
                 pointImg.z = it.getZ();
                 double height = (it.getZ()-pose_z+3)/6.0;
+                if (height < 0)
+                    height = 0;
+                else if (height > 1.0)
+                    height = 1.0;
+
+//                point.intensity = 50 + height*200;
+//                point.r = 50 + height*200;
+//                point.g = 50 + height*200;
+//                point.b = 50 + height*200;
 
                 cloud_map.push_back(point);
 
